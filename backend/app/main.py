@@ -6,6 +6,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.services.worker_client import worker_health
+
 
 class Settings(BaseSettings):
     app_env: str = "development"
@@ -27,7 +29,7 @@ settings = Settings()
 app = FastAPI(
     title="Creovanta API",
     description="Backend API for the Creovanta voice platform.",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -46,11 +48,13 @@ async def root() -> dict[str, str]:
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
+    worker = await worker_health()
     return {
         "ok": True,
         "service": "creovanta-api",
         "environment": settings.app_env,
-        "voice_engine": "not_configured",
+        "voice_engine": "disabled_until_model_validation",
+        "gpu_worker": worker,
     }
 
 
@@ -59,6 +63,6 @@ async def api_info() -> dict[str, str]:
     return {
         "name": "Creovanta",
         "api_version": "v1",
-        "status": "scaffold",
-        "message": "Authentication, storage, and voice inference are not connected yet.",
+        "status": "integration_scaffold",
+        "message": "GPU worker client is staged; user authentication, consent checks, job persistence, and model inference must be completed before generation is enabled.",
     }
