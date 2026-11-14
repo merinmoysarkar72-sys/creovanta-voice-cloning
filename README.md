@@ -6,18 +6,22 @@ Creovanta is a web platform for creating speech from text using a user's own voi
 
 ## Project status
 
-This repository now contains the initial API scaffold. The API health service is the first deployable milestone. Voice-model inference is not yet connected.
+The Next.js frontend supports Supabase email authentication, private voice-sample upload, consent recording, and a user-scoped Voice Library. The Render FastAPI service is live and includes a server-to-server GPU worker client and sanitized worker health reporting.
 
-## Planned architecture
+**Voice cloning and text-to-speech are not active yet.** The separate Modal GPU worker scaffold has not been deployed, and its generation endpoint intentionally returns HTTP 503 until model rights, model adapter, audio validation, and end-to-end safeguards are complete.
+
+## Architecture
 
 - **Web:** Next.js frontend, deployed on Vercel
 - **API:** Python FastAPI, deployed on Render
 - **Auth / database / storage:** Supabase
-- **Speech engine:** a separately hosted open-source inference service; GPU availability and operating cost must be evaluated before production use
+- **Speech engine:** separate Modal GPU worker (deployment workflow staged; model not connected)
 
 ## Safety
 
 Voice cloning must only be enabled for the account owner's voice or a voice for which the uploader has documented permission. Do not upload or generate speech impersonating someone without their consent.
+
+Never commit credentials, Supabase service-role keys, worker tokens, or private voice recordings.
 
 ## Backend local development
 
@@ -31,13 +35,14 @@ uvicorn app.main:app --reload
 
 The API listens on http://127.0.0.1:8000. Health check: `GET /health`.
 
-## Required configuration
+## GPU worker deployment
 
-See `backend/.env.example`. Never commit real credentials, Supabase service-role keys, model-provider keys, or private voice recordings.
+See [gpu-worker/README.md](gpu-worker/README.md) for the four required GitHub Actions secrets and the manual Modal deployment workflow.
 
 ## Current limitations
 
-- Authentication and Supabase data access are not wired yet.
-- Voice upload, consent persistence, and speech generation are not active yet.
-- No voice model is bundled in this repository.
+- Backend Supabase JWT verification, voice ownership/consent enforcement, generation-job persistence, and quotas are not wired yet.
+- Render's worker URL and API token are not configured yet.
+- Modal GPU worker deployment and actual model inference are not tested.
+- The Bangla Chatterbox candidate requires commercial-rights and training-data provenance review before production.
 - A successful API deployment does not mean voice cloning is operational.
