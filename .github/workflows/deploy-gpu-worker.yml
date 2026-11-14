@@ -2,12 +2,6 @@ name: Deploy Creovanta GPU Worker
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "gpu-worker/**"
-      - ".github/workflows/deploy-gpu-worker.yml"
 
 permissions:
   contents: read
