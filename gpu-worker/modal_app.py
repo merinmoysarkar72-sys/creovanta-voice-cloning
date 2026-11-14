@@ -67,6 +67,7 @@ async def generate(
     image=image,
     gpu=GPU_TYPE,
     volumes={"/model-cache": model_cache},
+    secrets=[modal.Secret.from_name("creovanta-worker")],
     timeout=900,
     scaledown_window=300,
     max_containers=2,
