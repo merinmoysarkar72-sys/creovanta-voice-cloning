@@ -25,8 +25,8 @@ The current candidate is `EMTIAZZ/chatterbox-bangla-tts`. Before enabling it:
 ## Automated deployment
 
 A GitHub Actions workflow is included at
-`.github/workflows/deploy-gpu-worker.yml`. It deploys on changes under
-`gpu-worker/` or via the Actions **Run workflow** button.
+`.github/workflows/deploy-gpu-worker.yml`. It runs only when manually started from the Actions **Run workflow** button.
+This avoids a failed automatic deployment before account secrets are configured.
 
 Before the first run, add these four repository Actions secrets in
 GitHub → Settings → Secrets and variables → Actions:
