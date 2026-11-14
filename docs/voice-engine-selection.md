@@ -41,14 +41,15 @@ Keep responsibilities separate:
 
 ## Current implementation status
 
-- The FastAPI service is still a scaffold. Its health response currently reports `voice_engine: not_configured`.
+- The Render FastAPI service now has a server-to-server GPU worker client and a sanitized `/health` status section. Its latest deploy is live at commit `64ffa1b088e16637d19ea877fd7f9ffdfa3f25db`.
+- The API health status reports `voice_engine: disabled_until_model_validation`; the worker URL/token are not configured yet.
 - No Chatterbox/PyTorch dependencies have been added to the Render service.
-- No model weights have been downloaded or loaded.
-- No inference endpoint is advertised as working.
-- A separate Modal GPU worker scaffold now exists under `gpu-worker/` with bearer authentication, a persistent model-cache volume, an L4 default GPU, and a two-container cap.
+- No model weights have been downloaded or loaded, and no real audio inference has been tested.
+- A separate Modal GPU worker scaffold exists under `gpu-worker/` with bearer authentication, Supabase signed-URL host/path validation, a persistent model-cache volume, an L4 default GPU, and a two-container cap.
 - Worker health is explicitly separate from model readiness. Generation returns HTTP 503 until the reviewed Bangla model adapter and safety checks are implemented.
+- A manual GitHub Actions deployment workflow is ready at `.github/workflows/deploy-gpu-worker.yml`; it requires four repository secrets before it can run.
 - The worker has not been deployed to Modal; no Modal account, credentials, GPU allocation, or inference test has been confirmed.
-- Next: implement the exact pinned model adapter after rights review, test it with consented samples, then wire Render orchestration to the worker server-to-server.
+- Next: configure the four deployment secrets, deploy the worker, set the Render worker URL/token, then implement the model adapter after rights review and test with consented samples.
 
 ## Alternative candidates / constraints
 
