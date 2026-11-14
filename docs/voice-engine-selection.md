@@ -45,7 +45,10 @@ Keep responsibilities separate:
 - No Chatterbox/PyTorch dependencies have been added to the Render service.
 - No model weights have been downloaded or loaded.
 - No inference endpoint is advertised as working.
-- The next implementation stage is to build and test a separate GPU inference worker, then connect it to the authenticated API.
+- A separate Modal GPU worker scaffold now exists under `gpu-worker/` with bearer authentication, a persistent model-cache volume, an L4 default GPU, and a two-container cap.
+- Worker health is explicitly separate from model readiness. Generation returns HTTP 503 until the reviewed Bangla model adapter and safety checks are implemented.
+- The worker has not been deployed to Modal; no Modal account, credentials, GPU allocation, or inference test has been confirmed.
+- Next: implement the exact pinned model adapter after rights review, test it with consented samples, then wire Render orchestration to the worker server-to-server.
 
 ## Alternative candidates / constraints
 
