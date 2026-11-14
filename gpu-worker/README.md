@@ -28,7 +28,7 @@ A GitHub Actions workflow is included at
 `.github/workflows/deploy-gpu-worker.yml`. It deploys on changes under
 `gpu-worker/` or via the Actions **Run workflow** button.
 
-Before the first run, add these three repository Actions secrets in
+Before the first run, add these four repository Actions secrets in
 GitHub → Settings → Secrets and variables → Actions:
 
 - `MODAL_TOKEN_ID`: Modal account token ID.
@@ -37,6 +37,8 @@ GitHub → Settings → Secrets and variables → Actions:
   authentication. Generate it locally with a password manager or a secure
   random generator. Use the exact same value for Render's
   `VOICE_ENGINE_API_KEY`.
+- `SUPABASE_URL`: the project's public Supabase project URL; used only to
+  restrict reference-audio URLs to the project's private Storage host.
 
 The workflow creates/updates the Modal secret named `creovanta-worker` and
 deploys `gpu-worker/modal_app.py`. The Modal token values are consumed only
