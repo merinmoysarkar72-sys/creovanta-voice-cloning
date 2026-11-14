@@ -5,6 +5,7 @@ installed. It must never report a fake successful synthesis.
 """
 import os
 from fastapi import FastAPI, Header, HTTPException
+from urllib.parse import urlparse
 from pydantic import BaseModel, Field
 import modal
 
@@ -27,6 +28,28 @@ class GenerateRequest(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     reference_audio_url: str = Field(min_length=1, max_length=4096)
 
+
+
+def validate_reference_audio_url(value: str) -> None:
+    """Allow only signed objects from this project's private voice-samples bucket."""
+    configured = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+    if not configured:
+        raise HTTPException(status_code=503, detail="Storage origin is not configured")
+    expected = urlparse(configured)
+    supplied = urlparse(value)
+    expected_prefix = "/storage/v1/object/sign/voice-samples/"
+    if (
+        expected.scheme != "https"
+        or not expected.hostname
+        or supplied.scheme != "https"
+        or supplied.hostname != expected.hostname
+        or supplied.port not in (None, 443)
+        or supplied.username
+        or supplied.password
+        or not supplied.path.startswith(expected_prefix)
+        or not supplied.query
+    ):
+        raise HTTPException(status_code=400, detail="Invalid private voice sample URL")
 
 def require_worker_token(authorization: str | None) -> None:
     expected = os.environ.get("CREOVANTA_WORKER_TOKEN")
@@ -55,6 +78,7 @@ async def generate(
     authorization: str | None = Header(default=None),
 ):
     require_worker_token(authorization)
+    validate_reference_audio_url(request.reference_audio_url)
     # Fail closed until license review, pinned model artifacts, audio validation,
     # consent checks, and the Chatterbox adapter have all passed.
     raise HTTPException(
