@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 import modal
 
 APP_NAME = "creovanta-voice-worker"
-GPU_TYPE = os.getenv("CREOVANTA_GPU", "L4")
+GPU_TYPE = os.getenv("CREOVANTA_GPU", "").strip() or None
 app = modal.App(APP_NAME)
 image = modal.Image.debian_slim(python_version="3.11").pip_install(
     "fastapi==0.115.12",
@@ -66,7 +66,7 @@ async def health(authorization: str | None = Header(default=None)):
     return {
         "status": "ok",
         "service": APP_NAME,
-        "gpu": GPU_TYPE,
+        "gpu": GPU_TYPE or "none (CPU-only)",
         "model_status": "not_configured",
         "generation_enabled": False,
     }
