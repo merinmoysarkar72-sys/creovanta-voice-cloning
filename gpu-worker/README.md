@@ -22,25 +22,33 @@ The current candidate is `EMTIAZZ/chatterbox-bangla-tts`. Before enabling it:
 5. Validate reference audio duration, size, codec, signed-URL host, output storage,
    job ownership, timeouts, and abuse limits end to end.
 
-## Deploy
+## Automated deployment
 
-Requires a Modal account and local CLI authentication. Do not put credentials
-in this repository or send them in chat.
+A GitHub Actions workflow is included at
+`.github/workflows/deploy-gpu-worker.yml`. It deploys on changes under
+`gpu-worker/` or via the Actions **Run workflow** button.
 
-```bash
-python -m pip install -r gpu-worker/requirements.txt
-modal setup
-modal secret create creovanta-worker CREOVANTA_WORKER_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
-modal deploy gpu-worker/modal_app.py
-```
+Before the first run, add these three repository Actions secrets in
+GitHub → Settings → Secrets and variables → Actions:
 
-Set the same `CREOVANTA_WORKER_TOKEN` as a protected environment secret in the
-Render API service before allowing Render to call this endpoint. Never expose
-the token to the browser.
+- `MODAL_TOKEN_ID`: Modal account token ID.
+- `MODAL_TOKEN_SECRET`: Modal account token secret.
+- `CREOVANTA_WORKER_TOKEN`: a long random secret used only for API-to-worker
+  authentication. Generate it locally with a password manager or a secure
+  random generator. Use the exact same value for Render's
+  `VOICE_ENGINE_API_KEY`.
 
-The default GPU is L4 and the container cap is two. GPU selection and spending
-limits must be reviewed in the Modal dashboard before production use. The model
-cache volume is persistent; model weights are not committed to Git.
+The workflow creates/updates the Modal secret named `creovanta-worker` and
+deploys `gpu-worker/modal_app.py`. The Modal token values are consumed only
+by GitHub Actions and must never be committed or sent in chat.
+
+## Render configuration after Modal deployment
+
+After the workflow succeeds, copy the deployed Modal web endpoint URL into
+Render's protected environment variable `VOICE_ENGINE_URL`, and set
+`VOICE_ENGINE_API_KEY` to the same value as `CREOVANTA_WORKER_TOKEN`.
+Do not add either value to the Next.js browser environment. Render will
+redeploy when its environment is saved.
 
 ## API contract
 
@@ -52,3 +60,10 @@ cache volume is persistent; model weights are not committed to Git.
 
 The Render API must call this endpoint server-to-server only. The browser must
 never receive the worker token or a Supabase service-role key.
+
+## Cost and rollout
+
+The default GPU is L4, with a maximum of two containers and a 300-second
+scale-down window. Review Modal workspace billing and GPU availability before
+enabling production. The persistent model-cache volume is created by the app;
+model weights are not committed to Git.
