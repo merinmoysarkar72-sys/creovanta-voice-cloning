@@ -37,7 +37,8 @@ def require_worker_token(authorization: str | None) -> None:
 
 
 @web.get("/health")
-async def health():
+async def health(authorization: str | None = Header(default=None)):
+    require_worker_token(authorization)
     # This is infrastructure health, not proof that a voice model is loaded.
     return {
         "status": "ok",
