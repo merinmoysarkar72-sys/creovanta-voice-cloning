@@ -24,12 +24,11 @@ jobs:
       MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
       MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
       CREOVANTA_WORKER_TOKEN: ${{ secrets.CREOVANTA_WORKER_TOKEN }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-    steps:
       - name: Validate required secrets
         shell: bash
         run: |
