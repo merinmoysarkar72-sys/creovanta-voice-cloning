@@ -257,6 +257,7 @@ export default function Home() {
         body: JSON.stringify({ voice_profile_id: selectedProfileId, text: transcript }),
       });
       if (!response.ok) {
+        if (isMaya && response.status === 401) { setHfAccessToken(""); setHfUsername(""); }
         let detail = "অডিও তৈরি হয়নি (HTTP " + response.status + ")";
         try { const body = await response.json(); detail = body.detail || detail; } catch {}
         throw new Error(detail);
@@ -298,6 +299,7 @@ export default function Home() {
       body: JSON.stringify({ voice_profile_id: profileId }),
     });
     if (!response.ok) {
+      if (provider === "maya" && response.status === 401) { setHfAccessToken(""); setHfUsername(""); }
       let detail = "Voice cloning failed (HTTP " + response.status + ")";
       try { const body = await response.json(); detail = body.detail || detail; } catch {}
       throw new Error(detail);
@@ -460,7 +462,7 @@ export default function Home() {
           <div className="status">Your account is connected. Add a voice sample below. Uploads are private and restricted to your account.</div>
           <div className="feature" style={{padding:16,marginBottom:18}}>
             <b>Free Maya engine · Hugging Face ZeroGPU</b>
-            <p className="small" style={{margin:"8px 0 12px"}}>{hfAccessToken ? "Connected as " + hfUsername + ". Your own free daily GPU quota is used; Creovanta does not store your Hugging Face token." : "Connect your Hugging Face account to use your own free daily GPU quota (5 minutes/day on a free account). No payment card is required."}</p>
+            <p className="small" style={{margin:"8px 0 12px"}}>{hfAccessToken ? "Connected as " + hfUsername + ". Your own free daily GPU quota is used; your token stays in this browser session and Creovanta does not store it." : "Connect your Hugging Face account to use your own free daily GPU quota (5 minutes/day on a free account). No payment card is required."}</p>
             {hfAccessToken ? <button className="btn secondary" onClick={disconnectHuggingFace}>Disconnect Hugging Face</button> : <button className="btn" onClick={connectHuggingFace}>Connect Hugging Face</button>}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14}}>
