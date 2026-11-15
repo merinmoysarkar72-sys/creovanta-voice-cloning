@@ -8,14 +8,14 @@ Creovanta is a web platform for creating speech from text using a user's own voi
 
 The Next.js frontend supports Supabase email authentication, private voice-sample upload, consent recording, and a user-scoped Voice Library. The Render FastAPI service is live and includes a server-to-server GPU worker client and sanitized worker health reporting.
 
-**Voice cloning and text-to-speech are not active yet.** The separate Modal GPU worker scaffold has not been deployed, and its generation endpoint intentionally returns HTTP 503 until model rights, model adapter, audio validation, and end-to-end safeguards are complete.
+**Cartesia text-to-speech backend integration is staged.** `POST /api/v1/tts` uses the server-side Cartesia key and voice ID, validates the Supabase session, restricts use to the configured owner account, and checks profile ownership plus accepted consent before generating Bengali MP3 audio. The browser must never receive the Cartesia API key.
 
 ## Architecture
 
 - **Web:** Next.js frontend, deployed on Vercel
 - **API:** Python FastAPI, deployed on Render
 - **Auth / database / storage:** Supabase
-- **Speech engine:** separate Modal GPU worker (deployment workflow staged; model not connected)
+- **Speech engine:** Cartesia hosted TTS API; Modal GPU worker remains available as a separate, currently inactive experiment
 
 ## Safety
 
@@ -46,3 +46,16 @@ See [gpu-worker/README.md](gpu-worker/README.md) for the four required GitHub Ac
 - Modal GPU worker deployment and actual model inference are not tested.
 - The Bangla Chatterbox candidate requires commercial-rights and training-data provenance review before production.
 - A successful API deployment does not mean voice cloning is operational.
+
+
+## Cartesia TTS configuration
+
+Set these variables on the Render API service (never in the browser):
+
+- `CARTESIA_API_KEY`: Cartesia API key
+- `CARTESIA_VOICE_ID`: the existing cloned Cartesia voice ID
+- `SUPABASE_URL`: Supabase project URL
+- `SUPABASE_ANON_KEY`: Supabase publishable/anon key (server-side use only here)
+- `CARTESIA_OWNER_USER_ID`: the Supabase Auth user UUID allowed to use this private voice
+
+The TTS endpoint accepts a JSON body containing `voice_profile_id` and `text`, plus the signed-in user's Supabase access token in the Authorization header. It returns MP3 bytes. The owner UUID must match the authenticated user, and the profile must have an accepted consent row visible under RLS.
