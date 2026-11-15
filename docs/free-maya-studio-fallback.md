@@ -16,6 +16,12 @@ Hugging Face's current ZeroGPU documentation says:
 
 The Maya Studio is an external public Space. A voice sample uploaded there is sent to and processed by that Space; it is not uploaded through Creovanta's private Supabase bucket and is not protected by Creovanta's per-user Voice Library controls. Users must upload only their own voice or a recording for which they have explicit permission. Do not send private or third-party recordings to the external demo without permission.
 
+## Runtime smoke test
+
+A live inference smoke test succeeded through the Hugging Face MCP-enabled Space [hugging-apps/maya2-native](https://huggingface.co/spaces/hugging-apps/maya2-native): a short Bengali sentence was generated using the built-in **Jahnavi** voice and returned a WAV file URL. This confirms that the Maya 2 Native inference path can produce Bengali audio on Hugging Face's shared GPU infrastructure.
+
+This test used a built-in synthetic voice. It did **not** test zero-shot cloning with a user's reference recording, long-form generation, concurrency, Creovanta account authorization, or storage of generated files in Creovanta. Those remain separate validation tasks.
+
 ## Production integration status
 
 This fallback does not change the Render API, Cartesia endpoints, Supabase schema, or Modal worker. The current Modal L4 deployment is blocked by Modal's payment-method requirement. Do not retry or change Modal billing for the free route.
