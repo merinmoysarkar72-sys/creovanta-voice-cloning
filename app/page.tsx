@@ -373,8 +373,8 @@ export default function Home() {
           </label>
           <button className="btn" style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9}} onClick={uploadVoice} disabled={busy}><UploadCloud size={17}/>{busy?"Please wait…":"Save private voice sample"}</button>
           <div style={{marginTop:28,borderTop:"1px solid #293044",paddingTop:22}}>
-            <h3 style={{fontSize:20,letterSpacing:"-.5px"}}>বাংলা Text-to-Speech</h3>
-            <p className="small" style={{marginBottom:14}}>তোমার Cartesia-তে ক্লোন করা কণ্ঠে বাংলা লেখা থেকে অডিও তৈরি করো। নির্বাচিত profile দিয়ে মালিকানা ও সম্মতি যাচাই হবে। সর্বোচ্চ ২০০০ অক্ষর।</p>
+            <h3 style={{fontSize:20,letterSpacing:"-.5px"}}>Creovanta বাংলা Text-to-Speech</h3>
+            <p className="small" style={{marginBottom:14}}>Creovanta Voice Cloning-এ তোমার নিজের ক্লোন করা কণ্ঠে বাংলা লেখা থেকে অডিও তৈরি করো। নির্বাচিত Voice Profile দিয়ে মালিকানা ও সম্মতি যাচাই হবে। সর্বোচ্চ ২০০০ অক্ষর।</p>
             <label>মালিকানা যাচাইয়ের Voice Profile</label>
             <select className="field" value={selectedProfileId} onChange={e=>setSelectedProfileId(e.target.value)} disabled={profiles.length===0}>
               {profiles.length===0 ? <option value="">আগে Voice Library-তে voice sample যোগ করো</option> : profiles.map(profile=><option key={profile.id} value={profile.id}>{profile.name}</option>)}
