@@ -2,7 +2,7 @@
 
 ## Design
 
-- Existing Cartesia endpoints remain available for older profiles.
+- The retired provider has been removed; all active profiles use the Creovanta speech workflow.
 - New profiles are marked `provider = 'maya'` and keep the exact reference transcript in `reference_text`.
 - The browser signs in to Hugging Face using OAuth PKCE. The access token stays in React memory and is sent only over HTTPS in the `X-HF-Token` request header; Creovanta does not persist it.
 - The API verifies the Supabase user, profile ownership, accepted consent, private sample path, and Hugging Face token before calling the official `maya-research/maya2-native-studio` Space.
@@ -23,7 +23,7 @@ If the production domain changes, update the canonical URL in both this route an
 
 Apply `supabase/migrations/20261115160346_maya_voice_profiles.sql` to the existing `creovanta-intelligence` Supabase project before using the new upload form. It adds:
 
-- `provider`: existing rows default to `cartesia`; new UI uploads use `maya`.
+- `provider`: all profiles are restricted to the Creovanta speech workflow.
 - `reference_text`: exact words spoken in the uploaded 3–10 second sample.
 
 The migration retains the existing provider/status guard and prevents ordinary authenticated users from changing a profile's provider or readiness state after insert.
