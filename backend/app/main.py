@@ -8,7 +8,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.services.account import router as account_router
-from app.services.cartesia_tts import router as cartesia_router
 from app.services.maya_studio import router as maya_router
 from app.services.worker_client import worker_health
 
@@ -37,7 +36,6 @@ app = FastAPI(
 )
 
 app.include_router(account_router)
-app.include_router(cartesia_router)
 app.include_router(maya_router)
 
 app.add_middleware(
@@ -61,7 +59,7 @@ async def health() -> dict[str, Any]:
         "ok": True,
         "service": "creovanta-api",
         "environment": settings.app_env,
-        "voice_engine": "cartesia_configured" if all(os.getenv(key) for key in ("CARTESIA_API_KEY", "SUPABASE_URL", "SUPABASE_ANON_KEY")) else "cartesia_configuration_incomplete",
+        "speech_service": "creovanta_speech",
         "gpu_worker": worker,
     }
 
@@ -71,6 +69,6 @@ async def api_info() -> dict[str, str]:
     return {
         "name": "Creovanta",
         "api_version": "v1",
-        "status": "cartesia_tts_endpoint_added",
-        "message": "POST /api/v1/voices/clone creates a private voice for an owned profile with accepted consent; POST /api/v1/tts uses that profile-specific voice ID.",
+        "status": "creovanta_speech_api",
+        "message": "Creovanta voice profiles and Bengali speech generation are available through the private account API.",
     }
