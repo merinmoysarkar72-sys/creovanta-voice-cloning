@@ -335,7 +335,7 @@ export default function Home() {
           <div style={{padding:"24px 0 8px",display:"flex",alignItems:"center",gap:12}}><div className="icon"><AudioLines/></div><div><b style={{fontSize:15}}>Your Voice Library</b><div className="small">Private voice profiles and samples</div></div></div>
           <div className="wave">{bars.map((h,i)=><i key={i} style={{"--h":h+"px"} as React.CSSProperties}/>)}</div>
           <div style={{display:"flex",justifyContent:"space-between"}}><span className="small">Waveform preview</span><span className="small">Private by default</span></div>
-          <div style={{borderTop:"1px solid #293044",marginTop:24,paddingTop:20,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span className="small">Speech engine</span><span className="small">Cartesia connected · first audio test pending</span></div>
+          <div style={{borderTop:"1px solid #293044",marginTop:24,paddingTop:20,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span className="small">Speech engine</span><span className="small">Creovanta Voice Cloning · audio generation tested</span></div>
         </div>
       </section>
 
@@ -417,7 +417,7 @@ export default function Home() {
         </>}
         {message && <div className="status" role="status">{message}</div>}
       </section>
-      <footer className="footer" style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}><span>© {new Date().getFullYear()} Creovanta</span><span>Built for voices with consent.</span></footer>
+      <footer className="footer" style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}><span>© {new Date().getFullYear()} Creovanta</span><span>Creovanta Voice Cloning · Your voice, your creation.</span></footer>
     </div>
   </main>;
 }
