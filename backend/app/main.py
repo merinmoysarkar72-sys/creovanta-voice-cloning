@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from typing import Any
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.services.worker_client import worker_health
+from app.services.cartesia_tts import router as cartesia_router
 
 
 class Settings(BaseSettings):
@@ -32,6 +34,8 @@ app = FastAPI(
     version="0.2.0",
 )
 
+app.include_router(cartesia_router)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
@@ -53,7 +57,7 @@ async def health() -> dict[str, Any]:
         "ok": True,
         "service": "creovanta-api",
         "environment": settings.app_env,
-        "voice_engine": "disabled_until_model_validation",
+        "voice_engine": "cartesia_configured" if all(os.getenv(key) for key in ("CARTESIA_API_KEY", "CARTESIA_VOICE_ID", "SUPABASE_URL", "SUPABASE_ANON_KEY", "CARTESIA_OWNER_USER_ID")) else "cartesia_configuration_incomplete",
         "gpu_worker": worker,
     }
 
