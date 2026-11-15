@@ -59,7 +59,7 @@ async def generate_speech(
 
     user_headers = {"apikey": anon_key, "Authorization": f"Bearer {token}"}
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(45.0)) as client:
             auth_response = await client.get(f"{supabase_url}/auth/v1/user", headers=user_headers)
             if auth_response.status_code == 401:
                 raise HTTPException(status_code=401, detail="Your session is invalid or expired")
