@@ -21,7 +21,7 @@ If the production domain changes, update the canonical URL in both this route an
 
 ## Database migration
 
-Apply `supabase/migrations/202611150002_maya_voice_profiles.sql` to the existing `creovanta-intelligence` Supabase project before using the new upload form. It adds:
+Apply `supabase/migrations/20261115230000_maya_voice_profiles.sql` to the existing `creovanta-intelligence` Supabase project before using the new upload form. It adds:
 
 - `provider`: existing rows default to `cartesia`; new UI uploads use `maya`.
 - `reference_text`: exact words spoken in the uploaded 3–10 second sample.
