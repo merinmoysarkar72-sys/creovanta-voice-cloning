@@ -110,7 +110,7 @@ export default function Home() {
 
   useEffect(() => {
     let active = true;
-    oauthHandleRedirectIfPresent({ redirectedUrl: window.location.href }).then((result) => {
+    oauthHandleRedirectIfPresent().then((result) => {
       if (!active || !result) return;
       const oauth = result as unknown as { accessToken: string; userInfo?: { preferred_username?: string; name?: string } };
       setHfAccessToken(oauth.accessToken);
