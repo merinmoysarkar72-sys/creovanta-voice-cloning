@@ -287,7 +287,7 @@ export default function Home() {
       if (sessionError || !accessToken) throw new Error("সেশন শেষ হয়েছে। আবার sign in করো।");
       const requestHeaders: Record<string, string> = { "Authorization": "Bearer " + accessToken, "Content-Type": "application/json" };
       requestHeaders["X-HF-Token"] = hfAccessToken;
-      const response = await fetch("https://creovanta-api.onrender.com/api/v1/maya/tts", {
+      const response = await fetch("https://creovanta-api.onrender.com/api/v1/speech/tts", {
         method: "POST",
         headers: requestHeaders,
         body: JSON.stringify({ voice_profile_id: selectedProfileId, text: transcript }),
@@ -329,7 +329,7 @@ export default function Home() {
     if (sessionError || !accessToken) throw new Error("সেশন শেষ হয়েছে। আবার sign in করো।");
     const requestHeaders: Record<string, string> = { "Authorization": "Bearer " + accessToken, "Content-Type": "application/json" };
     requestHeaders["X-HF-Token"] = hfAccessToken;
-    const response = await fetch("https://creovanta-api.onrender.com/api/v1/maya/voices/clone", {
+    const response = await fetch("https://creovanta-api.onrender.com/api/v1/speech/voices/clone", {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify({ voice_profile_id: profileId }),
