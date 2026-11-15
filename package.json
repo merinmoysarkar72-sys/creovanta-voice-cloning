@@ -14,7 +14,8 @@
     "next": "15.5.29",
     "react": "19.1.7",
     "react-dom": "19.1.7",
-    "@huggingface/hub": "2.14.4"
+    "@huggingface/hub": "2.14.4",
+    "@gradio/client": "2.8.0"
   },
   "devDependencies": {
     "@types/node": "22.15.30",
