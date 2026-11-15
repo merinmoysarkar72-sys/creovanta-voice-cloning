@@ -15,7 +15,7 @@ Creovanta publishes a Client ID Metadata Document at:
 
 `https://creovanta-omega.vercel.app/.well-known/oauth-cimd`
 
-It uses the Hugging Face-supported public OAuth + PKCE flow, with the production homepage as the exact redirect URI. No client secret is required. The browser requests only `openid profile` scopes.
+It uses the Hugging Face-supported public OAuth + PKCE flow, with the production homepage as the exact redirect URI. No client secret is required. The browser requests `openid profile inference-api` scopes so the connected account can authorize inference requests to the Maya Space.
 
 If the production domain changes, update the canonical URL in both this route and the browser's `connectHuggingFace` function, then register/allow the new redirect URI according to Hugging Face's current OAuth rules.
 
