@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from typing import Any
 import os
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.services.worker_client import worker_health
 from app.services.cartesia_tts import router as cartesia_router
+from app.services.worker_client import worker_health
 
 
 class Settings(BaseSettings):
@@ -67,6 +67,6 @@ async def api_info() -> dict[str, str]:
     return {
         "name": "Creovanta",
         "api_version": "v1",
-        "status": "integration_scaffold",
-        "message": "GPU worker client is staged; user authentication, consent checks, job persistence, and model inference must be completed before generation is enabled.",
+        "status": "cartesia_tts_endpoint_added",
+        "message": "POST /api/v1/tts requires a valid Supabase session, the configured owner account, an owned voice profile, and accepted consent.",
     }
