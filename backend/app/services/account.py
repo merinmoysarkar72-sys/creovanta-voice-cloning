@@ -34,9 +34,10 @@ async def delete_account(authorization: str | None = Header(default=None)) -> di
     supabase_url = _required_env("SUPABASE_URL").rstrip("/")
     anon_key = _required_env("SUPABASE_ANON_KEY")
     service_key = _required_env("SUPABASE_SERVICE_ROLE_KEY")
+    # New Supabase secret API keys are opaque, not JWTs. Keep the
+    # privileged key in apikey only; Authorization is reserved for user JWTs.
     admin_headers = {
         "apikey": service_key,
-        "Authorization": f"Bearer {service_key}",
         "Content-Type": "application/json",
     }
     user_headers = {"apikey": anon_key, "Authorization": f"Bearer {user_token}"}
