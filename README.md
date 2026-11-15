@@ -17,6 +17,12 @@ The Next.js frontend supports Supabase email authentication, private voice-sampl
 - **Auth / database / storage:** Supabase
 - **Speech engine:** Cartesia hosted voice cloning and TTS API, with a private provider voice ID stored per Creovanta profile; Modal GPU worker remains a separate, currently inactive experiment
 
+## Free Maya Studio fallback
+
+The frontend links to the public [Maya 2 Native Studio](https://huggingface.co/spaces/maya-research/maya2-native-studio) as a no-card fallback while Creovanta's private GPU worker is unavailable. The Space uses Hugging Face ZeroGPU; free accounts receive a limited daily quota (currently documented as 5 minutes). Users must sign in to Hugging Face in that Space. Audio uploaded there is processed by the external Space and is not part of Creovanta's private Supabase Voice Library. Only upload a voice you own or have explicit permission to use.
+
+This is a temporary external demo path, not a production API integration. The Cartesia route and private voice-library flow remain unchanged. Do not switch production generation to the external Space until a secure per-user authorization, quota, storage, and real inference integration has been implemented and tested.
+
 ## Safety
 
 Voice cloning must only be enabled for the account owner's voice or a voice for which the uploader has documented permission. Do not upload or generate speech impersonating someone without their consent.
