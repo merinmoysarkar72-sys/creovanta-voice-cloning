@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, AudioLines, ShieldCheck, Sparkles, WandSparkles, Mic2, UploadCloud, LogOut } from "lucide-react";
 import { createClient, SupabaseClient, User } from "@supabase/supabase-js";
+import { oauthHandleRedirectIfPresent, oauthLoginUrl } from "@huggingface/hub";
 
 
 type AudioHistoryItem = {
@@ -73,12 +74,14 @@ type VoiceProfile = {
   language_code: string;
   status: string;
   consent_type: "self" | "authorized";
+  provider: "cartesia" | "maya";
+  reference_text: string | null;
   created_at: string;
 };
 
 const BUCKET = "voice-samples";
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
-const ACCEPTED_TYPES = ["audio/wav", "audio/x-wav", "audio/mpeg", "audio/webm", "audio/flac", "audio/ogg"];
+const ACCEPTED_TYPES = ["audio/wav", "audio/x-wav", "audio/mpeg", "audio/flac", "audio/ogg"];
 
 export default function Home() {
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
@@ -91,6 +94,9 @@ export default function Home() {
   const [profiles, setProfiles] = useState<VoiceProfile[]>([]);
   const [voiceName, setVoiceName] = useState("");
   const [voiceDescription, setVoiceDescription] = useState("");
+  const [referenceText, setReferenceText] = useState("");
+  const [hfAccessToken, setHfAccessToken] = useState("");
+  const [hfUsername, setHfUsername] = useState("");
   const [consentType, setConsentType] = useState<"self" | "authorized">("self");
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -101,6 +107,20 @@ export default function Home() {
   const [audioExtension, setAudioExtension] = useState("wav");
   const [audioHistory, setAudioHistory] = useState<Array<{id:string;text:string;createdAt:string;url:string;extension:string}>>([]);
   const [historyMessage, setHistoryMessage] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    oauthHandleRedirectIfPresent().then((result) => {
+      if (!active || !result) return;
+      const oauth = result as unknown as { accessToken: string; userInfo?: { preferred_username?: string; name?: string } };
+      setHfAccessToken(oauth.accessToken);
+      setHfUsername(oauth.userInfo?.preferred_username || oauth.userInfo?.name || "Connected");
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+    }).catch(() => {
+      if (active) setMessage("Hugging Face sign-in did not finish. Please connect again.");
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -127,19 +147,36 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase, user?.id]);
 
-  async function loadProfiles() {
+  async function loadProfiles(preferredProfileId?: string) {
     if (!supabase || !user) return;
     const { data, error } = await supabase
       .from("voice_profiles")
-      .select("id,name,description,language_code,status,consent_type,created_at")
+      .select("id,name,description,language_code,status,consent_type,provider,reference_text,created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
     if (error) setMessage("Could not load your voice library: " + error.message);
     else {
       const nextProfiles = (data ?? []) as VoiceProfile[];
       setProfiles(nextProfiles);
-      setSelectedProfileId((current) => current || nextProfiles[0]?.id || "");
+      setSelectedProfileId((current) => preferredProfileId || (nextProfiles.some(profile => profile.id === current) ? current : nextProfiles[0]?.id || ""));
     }
+  }
+
+  async function connectHuggingFace() {
+    try {
+      const clientId = "https://creovanta-omega.vercel.app/.well-known/oauth-cimd";
+      const redirectUrl = "https://creovanta-omega.vercel.app/";
+      const url = await oauthLoginUrl({ clientId, redirectUrl, scopes: "openid profile inference-api" });
+      window.location.assign(url);
+    } catch {
+      setMessage("Could not start Hugging Face sign-in. Please try again.");
+    }
+  }
+
+  function disconnectHuggingFace() {
+    setHfAccessToken("");
+    setHfUsername("");
+    setMessage("Hugging Face account disconnected from this browser session.");
   }
 
   async function authenticate() {
@@ -167,6 +204,8 @@ export default function Home() {
     if (supabase) await supabase.auth.signOut();
     setUser(null);
     setProfiles([]);
+    setHfAccessToken("");
+    setHfUsername("");
     setMessage("You have signed out.");
   }
 
@@ -197,21 +236,28 @@ export default function Home() {
   async function generateSpeech() {
     if (!supabase || !user) return;
     const transcript = speechText.trim();
+    const selectedProfile = profiles.find(profile => profile.id === selectedProfileId);
+    if (selectedProfile?.provider === "maya" && !hfAccessToken) { setMessage("আগে Hugging Face account connect করো।"); return; }
     if (!selectedProfileId) { setMessage("আগে Voice Library থেকে একটি voice profile নির্বাচন করুন।"); return; }
     if (!transcript) { setMessage("বাংলা লেখা লিখুন।"); return; }
-    if (transcript.length > 2000) { setMessage("সর্বোচ্চ ২০০০ অক্ষর লেখা যাবে।"); return; }
+    const maxSpeechChars = selectedProfile?.provider === "maya" ? 1200 : 2000;
+    if (transcript.length > maxSpeechChars) { setMessage("সর্বোচ্চ " + maxSpeechChars + " অক্ষর লেখা যাবে।"); return; }
     setGenerating(true);
     setMessage("তোমার ক্লোন করা কণ্ঠে অডিও তৈরি হচ্ছে…");
     try {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
       if (sessionError || !accessToken) throw new Error("সেশন শেষ হয়েছে। আবার sign in করো।");
-      const response = await fetch("https://creovanta-api.onrender.com/api/v1/tts", {
+      const isMaya = selectedProfile?.provider === "maya";
+      const requestHeaders: Record<string, string> = { "Authorization": "Bearer " + accessToken, "Content-Type": "application/json" };
+      if (isMaya) requestHeaders["X-HF-Token"] = hfAccessToken;
+      const response = await fetch(isMaya ? "https://creovanta-api.onrender.com/api/v1/maya/tts" : "https://creovanta-api.onrender.com/api/v1/tts", {
         method: "POST",
-        headers: { "Authorization": "Bearer " + accessToken, "Content-Type": "application/json" },
+        headers: requestHeaders,
         body: JSON.stringify({ voice_profile_id: selectedProfileId, text: transcript }),
       });
       if (!response.ok) {
+        if (isMaya && response.status === 401) { setHfAccessToken(""); setHfUsername(""); }
         let detail = "অডিও তৈরি হয়নি (HTTP " + response.status + ")";
         try { const body = await response.json(); detail = body.detail || detail; } catch {}
         throw new Error(detail);
@@ -239,17 +285,21 @@ export default function Home() {
     }
   }
 
-  async function requestVoiceClone(profileId: string) {
+  async function requestVoiceClone(profileId: string, provider: "cartesia" | "maya" = "maya") {
     if (!supabase) throw new Error("Supabase is not configured.");
+    if (provider === "maya" && !hfAccessToken) throw new Error("আগে Hugging Face account connect করো।");
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
     const accessToken = sessionData.session?.access_token;
     if (sessionError || !accessToken) throw new Error("সেশন শেষ হয়েছে। আবার sign in করো।");
-    const response = await fetch("https://creovanta-api.onrender.com/api/v1/voices/clone", {
+    const requestHeaders: Record<string, string> = { "Authorization": "Bearer " + accessToken, "Content-Type": "application/json" };
+    if (provider === "maya") requestHeaders["X-HF-Token"] = hfAccessToken;
+    const response = await fetch(provider === "maya" ? "https://creovanta-api.onrender.com/api/v1/maya/voices/clone" : "https://creovanta-api.onrender.com/api/v1/voices/clone", {
       method: "POST",
-      headers: { "Authorization": "Bearer " + accessToken, "Content-Type": "application/json" },
+      headers: requestHeaders,
       body: JSON.stringify({ voice_profile_id: profileId }),
     });
     if (!response.ok) {
+      if (provider === "maya" && response.status === 401) { setHfAccessToken(""); setHfUsername(""); }
       let detail = "Voice cloning failed (HTTP " + response.status + ")";
       try { const body = await response.json(); detail = body.detail || detail; } catch {}
       throw new Error(detail);
@@ -260,7 +310,8 @@ export default function Home() {
     setBusy(true);
     setMessage("তোমার Voice Profile তৈরি হচ্ছে…");
     try {
-      await requestVoiceClone(profileId);
+      const profile = profiles.find(item => item.id === profileId);
+      await requestVoiceClone(profileId, profile?.provider ?? "maya");
       await loadProfiles();
       setMessage("Voice Profile প্রস্তুত। এখন বাংলা Text-to-Speech ব্যবহার করতে পারো।");
     } catch (error) {
@@ -274,11 +325,13 @@ export default function Home() {
   async function uploadVoice() {
     if (!supabase || !user) return;
     if (!voiceName.trim()) { setMessage("Give this voice profile a name."); return; }
+    if (!hfAccessToken) { setMessage("আগে Hugging Face account connect করো।"); return; }
+    if (!referenceText.trim()) { setMessage("রেকর্ডিংয়ে যা বলা হয়েছে, তার হুবহু transcript লিখুন।"); return; }
     if (!audioFile) { setMessage("Choose an audio file first."); return; }
     if (!consentAccepted) { setMessage("You must confirm voice ownership or explicit permission."); return; }
     if (audioFile.size > MAX_FILE_BYTES) { setMessage("The audio file must be 50 MB or smaller."); return; }
     if (!ACCEPTED_TYPES.includes(audioFile.type)) {
-      setMessage("Use a WAV, MP3, WebM, FLAC, or OGG audio file.");
+      setMessage("Use a WAV, MP3, FLAC, or OGG audio file.");
       return;
     }
 
@@ -301,6 +354,8 @@ export default function Home() {
       name: voiceName.trim(),
       description: voiceDescription.trim() || null,
       language_code: "bn",
+      provider: "maya",
+      reference_text: referenceText.trim(),
       source_audio_path: objectPath,
       consent_type: consentType,
       status: "processing",
@@ -317,7 +372,7 @@ export default function Home() {
       user_id: user.id,
       voice_profile_id: profile.data.id,
       consent_type: consentType,
-      consent_text_version: "creovanta-consent-v1",
+      consent_text_version: "creovanta-consent-v2-hf-maya",
       accepted: true,
     });
 
@@ -330,9 +385,9 @@ export default function Home() {
     }
 
     try {
-      await requestVoiceClone(profile.data.id);
+      await requestVoiceClone(profile.data.id, "maya");
     } catch (error) {
-      await loadProfiles();
+      await loadProfiles(profile.data.id);
       setBusy(false);
       setMessage("নমুনা ও সম্মতি সংরক্ষিত হয়েছে, কিন্তু ভয়েস ক্লোন তৈরি হয়নি। Voice Library থেকে আবার চেষ্টা করো। " + (error instanceof Error ? error.message : ""));
       return;
@@ -340,6 +395,7 @@ export default function Home() {
 
     setVoiceName("");
     setVoiceDescription("");
+    setReferenceText("");
     setAudioFile(null);
     setConsentAccepted(false);
     const input = document.getElementById("voice-audio") as HTMLInputElement | null;
@@ -379,7 +435,7 @@ export default function Home() {
           <div style={{padding:"24px 0 8px",display:"flex",alignItems:"center",gap:12}}><div className="icon"><AudioLines/></div><div><b style={{fontSize:15}}>Your Voice Library</b><div className="small">Private voice profiles and samples</div></div></div>
           <div className="wave">{bars.map((h,i)=><i key={i} style={{"--h":h+"px"} as React.CSSProperties}/>)}</div>
           <div style={{display:"flex",justifyContent:"space-between"}}><span className="small">Waveform preview</span><span className="small">Private by default</span></div>
-          <div style={{borderTop:"1px solid #293044",marginTop:24,paddingTop:20,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span className="small">Speech engine</span><span className="small">Creovanta Voice Cloning · audio generation tested</span></div>
+          <div style={{borderTop:"1px solid #293044",marginTop:24,paddingTop:20,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span className="small">Speech engine</span><span className="small">Maya 2 Native · Bengali TTS smoke test passed</span></div>
         </div>
       </section>
 
@@ -404,28 +460,37 @@ export default function Home() {
         </> : <>
           <p className="lead" style={{fontSize:14}}>Signed in as {user.email}</p>
           <div className="status">Your account is connected. Add a voice sample below. Uploads are private and restricted to your account.</div>
+          <div className="feature" style={{padding:16,marginBottom:18}}>
+            <b>Free Maya engine · Hugging Face ZeroGPU</b>
+            <p className="small" style={{margin:"8px 0 12px"}}>{hfAccessToken ? "Connected as " + hfUsername + ". Your own free daily GPU quota is used; the token stays only in this open page and is cleared on refresh. Creovanta does not store it." : "Connect your Hugging Face account with inference permission to use your own free daily GPU quota (5 minutes/day on a free account; resets 24 hours after first use). No payment card is required."}</p>
+            {hfAccessToken ? <button className="btn secondary" onClick={disconnectHuggingFace}>Disconnect Hugging Face</button> : <button className="btn" onClick={connectHuggingFace}>Connect Hugging Face</button>}
+          </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14}}>
             <div><label>Voice profile name</label><input className="field" value={voiceName} onChange={e=>setVoiceName(e.target.value)} placeholder="e.g. My Bengali Voice"/></div>
             <div><label>Voice ownership</label><select className="field" value={consentType} onChange={e=>setConsentType(e.target.value as "self"|"authorized")}><option value="self">This is my own voice</option><option value="authorized">I have explicit permission</option></select></div>
           </div>
           <label>Short description (optional)</label><input className="field" value={voiceDescription} onChange={e=>setVoiceDescription(e.target.value)} placeholder="Voice style or notes"/>
-          <label htmlFor="voice-audio">Audio sample (WAV, MP3, WebM, FLAC, OGG · max 50 MB)</label>
-          <input id="voice-audio" className="field" type="file" accept=".wav,.mp3,.webm,.flac,.ogg,.oga,audio/wav,audio/mpeg,audio/webm,audio/flac,audio/ogg" onChange={e=>setAudioFile(e.target.files?.[0] ?? null)}/>
+          <label htmlFor="voice-audio">Audio sample (WAV, MP3, FLAC, OGG · max 50 MB)</label>
+          <input id="voice-audio" className="field" type="file" accept=".wav,.mp3,.flac,.ogg,.oga,audio/wav,audio/mpeg,audio/flac,audio/ogg" onChange={e=>setAudioFile(e.target.files?.[0] ?? null)}/>
+          <label>Reference transcript (exact words spoken in the recording)</label>
+          <textarea className="field" rows={3} maxLength={2000} value={referenceText} onChange={e=>setReferenceText(e.target.value)} placeholder="রেকর্ডিংয়ে যে কথাগুলো বলা হয়েছে, ঠিক সেভাবেই লিখুন…" style={{resize:"vertical",lineHeight:1.7}} />
+          <p className="small" style={{marginTop:-6,marginBottom:12}}>বাংলায় পরিষ্কার একক কণ্ঠের ৩–১০ সেকেন্ডের নমুনা ব্যবহার করুন। Transcript ভুল হলে কণ্ঠের মিল কমতে পারে।</p>
+          <p className="small" style={{margin:"12px 0 8px"}}>গুরুত্বপূর্ণ: Maya দিয়ে voice clone ও audio generation করার সময় নমুনা অডিও এবং transcript Hugging Face-এর Maya Space-এ পাঠানো হবে। Space operator সেটি process করতে পারে এবং runtime-এ সাময়িকভাবে রাখতে পারে; retention Creovanta নিয়ন্ত্রণ করে না।</p>
           <label style={{display:"flex",alignItems:"flex-start",gap:10,margin:"10px 0 18px",lineHeight:1.5}}>
             <input type="checkbox" checked={consentAccepted} onChange={e=>setConsentAccepted(e.target.checked)} style={{marginTop:3}}/>
-            I confirm this is my voice or I have explicit permission from the voice owner to upload and use it for AI voice generation.
+            I confirm this is my voice, or I have explicit permission from the voice owner to upload it and let the external Hugging Face Maya Space process and temporarily handle the sample and transcript for AI speech generation.
           </label>
           <button className="btn" style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9}} onClick={uploadVoice} disabled={busy}><UploadCloud size={17}/>{busy?"Please wait…":"Save private voice sample"}</button>
           <div style={{marginTop:28,borderTop:"1px solid #293044",paddingTop:22}}>
             <h3 style={{fontSize:20,letterSpacing:"-.5px"}}>Creovanta বাংলা Text-to-Speech</h3>
-            <p className="small" style={{marginBottom:14}}>Creovanta Voice Cloning-এ তোমার নিজের ক্লোন করা কণ্ঠে বাংলা লেখা থেকে অডিও তৈরি করো। নির্বাচিত Voice Profile দিয়ে মালিকানা ও সম্মতি যাচাই হবে। সর্বোচ্চ ২০০০ অক্ষর।</p>
+            <p className="small" style={{marginBottom:14}}>Maya 2 Native দিয়ে তোমার নিজের reference audio থেকে বাংলা কণ্ঠে অডিও তৈরি করো। প্রতিটি generation তোমার Hugging Face ZeroGPU quota ব্যবহার করবে। সর্বোচ্চ ১২০০ অক্ষর।</p>
             <label>মালিকানা যাচাইয়ের Voice Profile</label>
             <select className="field" value={selectedProfileId} onChange={e=>setSelectedProfileId(e.target.value)} disabled={profiles.length===0}>
               {profiles.length===0 ? <option value="">আগে Voice Library-তে voice sample যোগ করো</option> : profiles.map(profile=><option key={profile.id} value={profile.id}>{profile.name}</option>)}
             </select>
             <label>যে বাংলা লেখা বলাতে চাও</label>
-            <textarea className="field" rows={5} maxLength={2000} value={speechText} onChange={e=>setSpeechText(e.target.value)} placeholder="এখানে বাংলা লেখা লিখুন… যেমন: আসসালামু আলাইকুম। ক্রিওভান্তায় আপনাকে স্বাগতম।" style={{resize:"vertical",lineHeight:1.7}} />
-            <div className="small" style={{textAlign:"right",marginTop:-8,marginBottom:14}}>{speechText.length}/2000</div>
+            <textarea className="field" rows={5} maxLength={profiles.find(profile=>profile.id===selectedProfileId)?.provider==="maya"?1200:2000} value={speechText} onChange={e=>setSpeechText(e.target.value)} placeholder="এখানে বাংলা লেখা লিখুন… যেমন: আসসালামু আলাইকুম। ক্রিওভান্তায় আপনাকে স্বাগতম।" style={{resize:"vertical",lineHeight:1.7}} />
+            <div className="small" style={{textAlign:"right",marginTop:-8,marginBottom:14}}>{speechText.length}/{profiles.find(profile=>profile.id===selectedProfileId)?.provider==="maya"?1200:2000}</div>
             <button className="btn" style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9}} onClick={generateSpeech} disabled={generating || !profiles.length || !speechText.trim()}><AudioLines size={17}/>{generating?"অডিও তৈরি হচ্ছে…":"অডিও তৈরি করুন"}</button>
             {audioUrl && <div className="feature" style={{marginTop:16,padding:16}}>
               <b>তোমার তৈরি অডিও</b>
