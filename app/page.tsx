@@ -81,7 +81,7 @@ type VoiceProfile = {
 
 const BUCKET = "voice-samples";
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
-const ACCEPTED_TYPES = ["audio/wav", "audio/x-wav", "audio/mpeg", "audio/webm", "audio/flac", "audio/ogg"];
+const ACCEPTED_TYPES = ["audio/wav", "audio/x-wav", "audio/mpeg", "audio/flac", "audio/ogg"];
 
 export default function Home() {
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
@@ -331,7 +331,7 @@ export default function Home() {
     if (!consentAccepted) { setMessage("You must confirm voice ownership or explicit permission."); return; }
     if (audioFile.size > MAX_FILE_BYTES) { setMessage("The audio file must be 50 MB or smaller."); return; }
     if (!ACCEPTED_TYPES.includes(audioFile.type)) {
-      setMessage("Use a WAV, MP3, WebM, FLAC, or OGG audio file.");
+      setMessage("Use a WAV, MP3, FLAC, or OGG audio file.");
       return;
     }
 
@@ -471,7 +471,7 @@ export default function Home() {
           </div>
           <label>Short description (optional)</label><input className="field" value={voiceDescription} onChange={e=>setVoiceDescription(e.target.value)} placeholder="Voice style or notes"/>
           <label htmlFor="voice-audio">Audio sample (WAV, MP3, WebM, FLAC, OGG · max 50 MB)</label>
-          <input id="voice-audio" className="field" type="file" accept=".wav,.mp3,.webm,.flac,.ogg,.oga,audio/wav,audio/mpeg,audio/webm,audio/flac,audio/ogg" onChange={e=>setAudioFile(e.target.files?.[0] ?? null)}/>
+          <input id="voice-audio" className="field" type="file" accept=".wav,.mp3,.flac,.ogg,.oga,audio/wav,audio/mpeg,audio/flac,audio/ogg" onChange={e=>setAudioFile(e.target.files?.[0] ?? null)}/>
           <label>Reference transcript (exact words spoken in the recording)</label>
           <textarea className="field" rows={3} maxLength={2000} value={referenceText} onChange={e=>setReferenceText(e.target.value)} placeholder="রেকর্ডিংয়ে যে কথাগুলো বলা হয়েছে, ঠিক সেভাবেই লিখুন…" style={{resize:"vertical",lineHeight:1.7}} />
           <p className="small" style={{marginTop:-6,marginBottom:12}}>বাংলায় পরিষ্কার একক কণ্ঠের ৩–১০ সেকেন্ডের নমুনা ব্যবহার করুন। Transcript ভুল হলে কণ্ঠের মিল কমতে পারে।</p>
