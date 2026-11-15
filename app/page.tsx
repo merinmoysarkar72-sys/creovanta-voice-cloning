@@ -240,7 +240,7 @@ export default function Home() {
     if (selectedProfile?.provider === "maya" && !hfAccessToken) { setMessage("আগে Hugging Face account connect করো।"); return; }
     if (!selectedProfileId) { setMessage("আগে Voice Library থেকে একটি voice profile নির্বাচন করুন।"); return; }
     if (!transcript) { setMessage("বাংলা লেখা লিখুন।"); return; }
-    if (transcript.length > 2000) { setMessage("সর্বোচ্চ ২০০০ অক্ষর লেখা যাবে।"); return; }
+    if (transcript.length > 1200) { setMessage("Maya-তে সর্বোচ্চ ১২০০ অক্ষর লেখা যাবে।"); return; }
     setGenerating(true);
     setMessage("তোমার ক্লোন করা কণ্ঠে অডিও তৈরি হচ্ছে…");
     try {
@@ -485,8 +485,8 @@ export default function Home() {
               {profiles.length===0 ? <option value="">আগে Voice Library-তে voice sample যোগ করো</option> : profiles.map(profile=><option key={profile.id} value={profile.id}>{profile.name}</option>)}
             </select>
             <label>যে বাংলা লেখা বলাতে চাও</label>
-            <textarea className="field" rows={5} maxLength={2000} value={speechText} onChange={e=>setSpeechText(e.target.value)} placeholder="এখানে বাংলা লেখা লিখুন… যেমন: আসসালামু আলাইকুম। ক্রিওভান্তায় আপনাকে স্বাগতম।" style={{resize:"vertical",lineHeight:1.7}} />
-            <div className="small" style={{textAlign:"right",marginTop:-8,marginBottom:14}}>{speechText.length}/2000</div>
+            <textarea className="field" rows={5} maxLength={1200} value={speechText} onChange={e=>setSpeechText(e.target.value)} placeholder="এখানে বাংলা লেখা লিখুন… যেমন: আসসালামু আলাইকুম। ক্রিওভান্তায় আপনাকে স্বাগতম।" style={{resize:"vertical",lineHeight:1.7}} />
+            <div className="small" style={{textAlign:"right",marginTop:-8,marginBottom:14}}>{speechText.length}/1200</div>
             <button className="btn" style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9}} onClick={generateSpeech} disabled={generating || !profiles.length || !speechText.trim()}><AudioLines size={17}/>{generating?"অডিও তৈরি হচ্ছে…":"অডিও তৈরি করুন"}</button>
             {audioUrl && <div className="feature" style={{marginTop:16,padding:16}}>
               <b>তোমার তৈরি অডিও</b>
