@@ -12,8 +12,7 @@ Maya 2 Native for Bengali text-to-speech and consented voice cloning.
 - The worker scales down after 300 seconds and is limited to one container.
 - `GET /health` reports `model_status: ready` only after the model has loaded.
 - `POST /v1/generate` returns a WAV file encoded in JSON as `audio_base64`.
-- Render is not yet switched to this worker. Keep the existing Cartesia route
-  untouched until a real Modal generation test succeeds.
+- Render is not yet switched to this worker. Do not connect this inactive worker to production until a real end-to-end model test succeeds.
 
 ## Model and voice mode
 
