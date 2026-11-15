@@ -57,7 +57,7 @@ async def health() -> dict[str, Any]:
         "ok": True,
         "service": "creovanta-api",
         "environment": settings.app_env,
-        "voice_engine": "cartesia_configured" if all(os.getenv(key) for key in ("CARTESIA_API_KEY", "CARTESIA_VOICE_ID", "SUPABASE_URL", "SUPABASE_ANON_KEY", "CARTESIA_OWNER_USER_ID")) else "cartesia_configuration_incomplete",
+        "voice_engine": "cartesia_configured" if all(os.getenv(key) for key in ("CARTESIA_API_KEY", "SUPABASE_URL", "SUPABASE_ANON_KEY")) else "cartesia_configuration_incomplete",
         "gpu_worker": worker,
     }
 
@@ -68,5 +68,5 @@ async def api_info() -> dict[str, str]:
         "name": "Creovanta",
         "api_version": "v1",
         "status": "cartesia_tts_endpoint_added",
-        "message": "POST /api/v1/tts requires a valid Supabase session, the configured owner account, an owned voice profile, and accepted consent.",
+        "message": "POST /api/v1/voices/clone creates a private voice for an owned profile with accepted consent; POST /api/v1/tts uses that profile-specific voice ID.",
     }
