@@ -166,7 +166,7 @@ export default function Home() {
     try {
       const clientId = "https://creovanta-omega.vercel.app/.well-known/oauth-cimd";
       const redirectUrl = "https://creovanta-omega.vercel.app/";
-      const url = await oauthLoginUrl({ clientId, redirectUrl, scopes: "openid profile" });
+      const url = await oauthLoginUrl({ clientId, redirectUrl, scopes: "openid profile inference-api" });
       window.location.assign(url);
     } catch {
       setMessage("Could not start Hugging Face sign-in. Please try again.");
@@ -462,7 +462,7 @@ export default function Home() {
           <div className="status">Your account is connected. Add a voice sample below. Uploads are private and restricted to your account.</div>
           <div className="feature" style={{padding:16,marginBottom:18}}>
             <b>Free Maya engine · Hugging Face ZeroGPU</b>
-            <p className="small" style={{margin:"8px 0 12px"}}>{hfAccessToken ? "Connected as " + hfUsername + ". Your own free daily GPU quota is used; the token stays only in this open page and is cleared on refresh. Creovanta does not store it." : "Connect your Hugging Face account to use your own free daily GPU quota (5 minutes/day on a free account; resets 24 hours after first use). No payment card is required."}</p>
+            <p className="small" style={{margin:"8px 0 12px"}}>{hfAccessToken ? "Connected as " + hfUsername + ". Your own free daily GPU quota is used; the token stays only in this open page and is cleared on refresh. Creovanta does not store it." : "Connect your Hugging Face account with inference permission to use your own free daily GPU quota (5 minutes/day on a free account; resets 24 hours after first use). No payment card is required."}</p>
             {hfAccessToken ? <button className="btn secondary" onClick={disconnectHuggingFace}>Disconnect Hugging Face</button> : <button className="btn" onClick={connectHuggingFace}>Connect Hugging Face</button>}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14}}>
@@ -470,7 +470,7 @@ export default function Home() {
             <div><label>Voice ownership</label><select className="field" value={consentType} onChange={e=>setConsentType(e.target.value as "self"|"authorized")}><option value="self">This is my own voice</option><option value="authorized">I have explicit permission</option></select></div>
           </div>
           <label>Short description (optional)</label><input className="field" value={voiceDescription} onChange={e=>setVoiceDescription(e.target.value)} placeholder="Voice style or notes"/>
-          <label htmlFor="voice-audio">Audio sample (WAV, MP3, WebM, FLAC, OGG · max 50 MB)</label>
+          <label htmlFor="voice-audio">Audio sample (WAV, MP3, FLAC, OGG · max 50 MB)</label>
           <input id="voice-audio" className="field" type="file" accept=".wav,.mp3,.flac,.ogg,.oga,audio/wav,audio/mpeg,audio/flac,audio/ogg" onChange={e=>setAudioFile(e.target.files?.[0] ?? null)}/>
           <label>Reference transcript (exact words spoken in the recording)</label>
           <textarea className="field" rows={3} maxLength={2000} value={referenceText} onChange={e=>setReferenceText(e.target.value)} placeholder="রেকর্ডিংয়ে যে কথাগুলো বলা হয়েছে, ঠিক সেভাবেই লিখুন…" style={{resize:"vertical",lineHeight:1.7}} />
