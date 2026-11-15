@@ -100,7 +100,7 @@ async def _get_owned_profile(
         params={
             "id": f"eq.{profile_id}",
             "user_id": f"eq.{user_id}",
-            "select": "id,name,source_audio_path,status,provider,reference_text,language_code",
+            "select": "id,name,source_audio_path,status,reference_text,language_code",
         },
         headers={**user_headers, "Accept": "application/json"},
     )
@@ -109,8 +109,6 @@ async def _get_owned_profile(
     if not rows:
         raise HTTPException(status_code=404, detail="Voice profile not found for this account")
     profile = rows[0]
-    if profile.get("provider") != "maya":
-        raise HTTPException(status_code=409, detail="This profile is not configured for Creovanta speech")
     if not str(profile.get("reference_text") or "").strip():
         raise HTTPException(status_code=422, detail="The exact reference-audio transcript is required")
     return profile
@@ -204,7 +202,7 @@ async def _generate_speech_audio(
     reference_text: str,
     reference_language: str,
 ) -> tuple[bytes, float]:
-    with tempfile.TemporaryDirectory(prefix="creovanta-maya-") as folder:
+    with tempfile.TemporaryDirectory(prefix="creovanta-speech-") as folder:
         audio_path = str(Path(folder) / f"reference{suffix}")
         Path(audio_path).write_bytes(sample)
         try:
@@ -218,7 +216,7 @@ async def _generate_speech_audio(
             )
         except Exception as exc:
             diagnostic = str(exc).replace(hf_token, "[redacted]")[:800]
-            print(f"[maya2] clone_speak failed: {type(exc).__name__}: {diagnostic}", flush=True)
+            print(f"[creovanta-speech] generation failed: {type(exc).__name__}: {diagnostic}", flush=True)
             message = str(exc).lower()
             if "quota" in message or "exceeded" in message:
                 raise HTTPException(
@@ -234,7 +232,7 @@ async def _generate_speech_audio(
     resolved_url = urljoin(HF_SPACE_URL + "/", audio_url)
     parsed = urlparse(resolved_url)
     if parsed.scheme != "https" or parsed.hostname != urlparse(HF_SPACE_URL).hostname:
-        raise HTTPException(status_code=502, detail="Maya returned an invalid audio location")
+        raise HTTPException(status_code=502, detail="Creovanta returned an invalid audio location")
 
     audio_response = await client.get(
         resolved_url, headers={"Authorization": f"Bearer {hf_token}"}
@@ -328,7 +326,7 @@ async def generate_speech(
     authorization: str | None = Header(default=None),
     hf_token_header: str | None = Header(default=None, alias="X-HF-Token"),
 ) -> Response:
-    """Generate Bengali speech from the user's own consented Maya reference sample."""
+    """Generate Bengali speech from the user's own consented Creovanta voice profile."""
     token = _bearer_token(authorization)
     hf_token = _hf_token(hf_token_header)
     supabase_url = _required_env("SUPABASE_URL").rstrip("/")
@@ -350,7 +348,7 @@ async def generate_speech(
             sample, suffix = await _download_reference(
                 client, supabase_url, user_headers, profile, user_id
             )
-            audio, _ = await _generate_maya_audio(
+            audio, _ = await _generate_speech_audio(
                 client, hf_token, sample, suffix, request.text,
                 str(profile["reference_text"]).strip(),
                 str(profile.get("language_code") or "bn"),
@@ -359,7 +357,7 @@ async def generate_speech(
                 content=audio,
                 media_type="audio/wav",
                 headers={
-                    "Content-Disposition": 'inline; filename="creovanta-maya-speech.wav"',
+                    "Content-Disposition": 'inline; filename="creovanta-speech.wav"',
                     "Cache-Control": "no-store",
                     "X-Content-Type-Options": "nosniff",
                 },
