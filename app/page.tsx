@@ -462,7 +462,7 @@ export default function Home() {
           <div className="status">Your account is connected. Add a voice sample below. Uploads are private and restricted to your account.</div>
           <div className="feature" style={{padding:16,marginBottom:18}}>
             <b>Free Maya engine · Hugging Face ZeroGPU</b>
-            <p className="small" style={{margin:"8px 0 12px"}}>{hfAccessToken ? "Connected as " + hfUsername + ". Your own free daily GPU quota is used; the token stays only in this open page and is cleared on refresh. Creovanta does not store it." : "Connect your Hugging Face account to use your own free daily GPU quota (5 minutes/day on a free account). No payment card is required."}</p>
+            <p className="small" style={{margin:"8px 0 12px"}}>{hfAccessToken ? "Connected as " + hfUsername + ". Your own free daily GPU quota is used; the token stays only in this open page and is cleared on refresh. Creovanta does not store it." : "Connect your Hugging Face account to use your own free daily GPU quota (5 minutes/day on a free account; resets 24 hours after first use). No payment card is required."}</p>
             {hfAccessToken ? <button className="btn secondary" onClick={disconnectHuggingFace}>Disconnect Hugging Face</button> : <button className="btn" onClick={connectHuggingFace}>Connect Hugging Face</button>}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14}}>
