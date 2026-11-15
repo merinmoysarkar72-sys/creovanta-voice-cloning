@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight, AudioLines, ShieldCheck, Sparkles, WandSparkles, Mic2, UploadCloud, LogOut } from "lucide-react";
 import { createClient, SupabaseClient, User } from "@supabase/supabase-js";
 import { oauthHandleRedirectIfPresent, oauthLoginUrl } from "@huggingface/hub";
+import { Client, handle_file } from "@gradio/client";
 
 
 type AudioHistoryItem = {
@@ -76,6 +77,7 @@ type VoiceProfile = {
   consent_type: "self" | "authorized";
   reference_text: string | null;
   created_at: string;
+  source_audio_path: string;
 };
 
 const BUCKET = "voice-samples";
@@ -150,14 +152,15 @@ export default function Home() {
     if (!supabase || !user) return;
     const { data, error } = await supabase
       .from("voice_profiles")
-      .select("id,name,description,language_code,status,consent_type,reference_text,created_at")
+      .select("id,name,description,language_code,status,consent_type,reference_text,source_audio_path,created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
     if (error) setMessage("Could not load your voice library: " + error.message);
     else {
       const nextProfiles = (data ?? []) as VoiceProfile[];
       setProfiles(nextProfiles);
-      setSelectedProfileId((current) => preferredProfileId || (nextProfiles.some(profile => profile.id === current) ? current : nextProfiles[0]?.id || ""));
+      const readyProfiles = nextProfiles.filter(profile => profile.status === "ready" && profile.reference_text && profile.source_audio_path);
+      setSelectedProfileId((current) => preferredProfileId && readyProfiles.some(profile => profile.id === preferredProfileId) ? preferredProfileId : (readyProfiles.some(profile => profile.id === current) ? current : readyProfiles[0]?.id || ""));
     }
   }
 
@@ -169,6 +172,73 @@ export default function Home() {
       window.location.assign(url);
     } catch {
       setMessage("Could not start the account connection. Please try again.");
+    }
+  }
+
+
+  const MAYA_SPACE = "maya-research/maya2-native-studio";
+  const MAYA_SPACE_ORIGIN = "https://maya-research-maya2-native-studio.hf.space";
+
+  async function runMayaClone(text: string, sample: Blob, transcript: string, referenceLanguage = "bn") {
+    if (!hfAccessToken) throw new Error("আগে generation account connect করো।");
+    const client = await Client.connect(MAYA_SPACE, { token: hfAccessToken });
+    const result = await client.predict("/clone_speak", [
+      text,
+      handle_file(sample),
+      transcript,
+      referenceLanguage,
+      "bn",
+      true,
+      0,
+      true,
+    ]);
+    const raw = Array.isArray(result.data) ? result.data[0] : result.data;
+    const output = raw as { audio_url?: string; duration?: number } | null;
+    if (!output?.audio_url) throw new Error("Maya থেকে অডিও পাওয়া যায়নি। আবার চেষ্টা করো।");
+    const audioUrl = new URL(output.audio_url, MAYA_SPACE_ORIGIN + "/");
+    if (audioUrl.origin !== MAYA_SPACE_ORIGIN) throw new Error("অডিওর ঠিকানা নিরাপদ নয়।");
+    const audioResponse = await fetch(audioUrl.toString(), {
+      headers: { Authorization: "Bearer " + hfAccessToken },
+    });
+    if (!audioResponse.ok) throw new Error("তৈরি অডিও ডাউনলোড করা যায়নি (HTTP " + audioResponse.status + ")।");
+    const blob = await audioResponse.blob();
+    if (!blob.size) throw new Error("Maya খালি অডিও পাঠিয়েছে।");
+    return { blob, contentType: audioResponse.headers.get("content-type") || "audio/wav" };
+  }
+
+  async function updateVoiceProfileStatus(profileId: string, status: "ready" | "failed") {
+    if (!supabase || !hfAccessToken) throw new Error("অ্যাকাউন্ট সংযোগ পাওয়া যায়নি।");
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (sessionError || !accessToken) throw new Error("সেশন শেষ হয়েছে। আবার sign in করো।");
+    const response = await fetch("https://creovanta-api.onrender.com/api/v1/speech/voices/status", {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer " + accessToken,
+        "X-HF-Token": hfAccessToken,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ voice_profile_id: profileId, status }),
+    });
+    if (!response.ok) {
+      let detail = "Voice Profile status update failed (HTTP " + response.status + ")";
+      try { const body = await response.json(); detail = body.detail || detail; } catch {}
+      throw new Error(detail);
+    }
+  }
+
+  async function audioDurationSeconds(file: File): Promise<number> {
+    const url = URL.createObjectURL(file);
+    try {
+      return await new Promise<number>((resolve, reject) => {
+        const audio = new Audio();
+        audio.preload = "metadata";
+        audio.onloadedmetadata = () => resolve(audio.duration);
+        audio.onerror = () => reject(new Error("অডিও ফাইলটি পড়া যাচ্ছে না।"));
+        audio.src = url;
+      });
+    } finally {
+      URL.revokeObjectURL(url);
     }
   }
 
@@ -274,32 +344,22 @@ export default function Home() {
     if (!supabase || !user) return;
     const transcript = speechText.trim();
     if (!hfAccessToken) { setMessage("আগে generation account connect করো।"); return; }
-    if (!selectedProfileId) { setMessage("আগে Voice Library থেকে একটি voice profile নির্বাচন করুন।"); return; }
+    const profile = profiles.find(item => item.id === selectedProfileId);
+    if (!profile || profile.status !== "ready" || !profile.reference_text || !profile.source_audio_path) {
+      setMessage("আগে প্রস্তুত Voice Profile তৈরি বা নির্বাচন করুন।");
+      return;
+    }
     if (!transcript) { setMessage("বাংলা লেখা লিখুন।"); return; }
     const maxSpeechChars = 1200;
     if (transcript.length > maxSpeechChars) { setMessage("সর্বোচ্চ " + maxSpeechChars + " অক্ষর লেখা যাবে।"); return; }
     setGenerating(true);
-    setMessage("তোমার ক্লোন করা কণ্ঠে অডিও তৈরি হচ্ছে…");
+    setMessage("তোমার কণ্ঠে অডিও তৈরি হচ্ছে… প্রথমবার GPU চালু হতে প্রায় এক মিনিট লাগতে পারে।");
     try {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token;
-      if (sessionError || !accessToken) throw new Error("সেশন শেষ হয়েছে। আবার sign in করো।");
-      const requestHeaders: Record<string, string> = { "Authorization": "Bearer " + accessToken, "Content-Type": "application/json" };
-      requestHeaders["X-HF-Token"] = hfAccessToken;
-      const response = await fetch("https://creovanta-api.onrender.com/api/v1/speech/tts", {
-        method: "POST",
-        headers: requestHeaders,
-        body: JSON.stringify({ voice_profile_id: selectedProfileId, text: transcript }),
-      });
-      if (!response.ok) {
-        if (response.status === 401) { setHfAccessToken(""); setHfUsername(""); }
-        let detail = "অডিও তৈরি হয়নি (HTTP " + response.status + ")";
-        try { const body = await response.json(); detail = body.detail || detail; } catch {}
-        throw new Error(detail);
-      }
-      const blob = await response.blob();
-      if (!blob.size) throw new Error("সার্ভার খালি অডিও পাঠিয়েছে।");
-      const contentType = response.headers.get("content-type") || blob.type;
+      const sample = await supabase.storage.from(BUCKET).download(profile.source_audio_path);
+      if (sample.error || !sample.data) throw new Error("ব্যক্তিগত voice sample পাওয়া যায়নি। আবার upload করো।");
+      const generated = await runMayaClone(transcript, sample.data, profile.reference_text, profile.language_code || "bn");
+      const blob = generated.blob;
+      const contentType = generated.contentType;
       const extension = contentType.includes("mpeg") ? "mp3" : "wav";
       const nextUrl = URL.createObjectURL(new Blob([blob], { type: contentType }));
       setAudioExtension(extension);
@@ -314,42 +374,31 @@ export default function Home() {
       }
       setMessage("অডিও তৈরি হয়েছে। নিচে শুনতে ও ডাউনলোড করতে পারো।");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "অজানা সমস্যায় অডিও তৈরি হয়নি।");
+      const message = error instanceof Error ? error.message : "অজানা সমস্যায় অডিও তৈরি হয়নি।";
+      setMessage(message);
     } finally {
       setGenerating(false);
     }
   }
 
-  async function requestVoiceClone(profileId: string) {
-    if (!supabase) throw new Error("Supabase is not configured.");
-    if (!hfAccessToken) throw new Error("আগে generation account connect করো।");
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    const accessToken = sessionData.session?.access_token;
-    if (sessionError || !accessToken) throw new Error("সেশন শেষ হয়েছে। আবার sign in করো।");
-    const requestHeaders: Record<string, string> = { "Authorization": "Bearer " + accessToken, "Content-Type": "application/json" };
-    requestHeaders["X-HF-Token"] = hfAccessToken;
-    const response = await fetch("https://creovanta-api.onrender.com/api/v1/speech/voices/clone", {
-      method: "POST",
-      headers: requestHeaders,
-      body: JSON.stringify({ voice_profile_id: profileId }),
-    });
-    if (!response.ok) {
-      if (response.status === 401) { setHfAccessToken(""); setHfUsername(""); }
-      let detail = "Voice cloning failed (HTTP " + response.status + ")";
-      try { const body = await response.json(); detail = body.detail || detail; } catch {}
-      throw new Error(detail);
-    }
-  }
-
   async function retryVoiceClone(profileId: string) {
+    if (!supabase) return;
+    const profile = profiles.find(item => item.id === profileId);
+    if (!profile?.reference_text || !profile.source_audio_path) {
+      setMessage("এই পুরোনো Profile-এ transcript বা sample path নেই। নতুন নমুনা upload করো।");
+      return;
+    }
     setBusy(true);
-    setMessage("তোমার Voice Profile তৈরি হচ্ছে…");
+    setMessage("Voice Profile আবার তৈরি হচ্ছে…");
     try {
-      const profile = profiles.find(item => item.id === profileId);
-      await requestVoiceClone(profileId);
-      await loadProfiles();
-      setMessage("Voice Profile প্রস্তুত। এখন বাংলা Text-to-Speech ব্যবহার করতে পারো।");
+      const sample = await supabase.storage.from(BUCKET).download(profile.source_audio_path);
+      if (sample.error || !sample.data) throw new Error("ব্যক্তিগত voice sample পাওয়া যায়নি। নতুন করে upload করো।");
+      await runMayaClone("আমার কণ্ঠে বাংলা অডিও পরীক্ষা করা হচ্ছে।", sample.data, profile.reference_text, profile.language_code || "bn");
+      await updateVoiceProfileStatus(profileId, "ready");
+      await loadProfiles(profileId);
+      setMessage("Voice Profile প্রস্তুত। এখন Text-to-Speech ব্যবহার করতে পারো।");
     } catch (error) {
+      await updateVoiceProfileStatus(profileId, "failed").catch(() => undefined);
       await loadProfiles();
       setMessage(error instanceof Error ? error.message : "Voice cloning সম্পন্ন হয়নি। পরে আবার চেষ্টা করো।");
     } finally {
@@ -365,6 +414,10 @@ export default function Home() {
     if (!audioFile) { setMessage("Choose an audio file first."); return; }
     if (!consentAccepted) { setMessage("You must confirm voice ownership or explicit permission."); return; }
     if (audioFile.size > MAX_FILE_BYTES) { setMessage("The audio file must be 50 MB or smaller."); return; }
+    try {
+      const seconds = await audioDurationSeconds(audioFile);
+      if (!Number.isFinite(seconds) || seconds < 3 || seconds > 10) { setMessage("৩–১০ সেকেন্ডের পরিষ্কার voice sample ব্যবহার করুন।"); return; }
+    } catch (error) { setMessage(error instanceof Error ? error.message : "অডিও ফাইলটি পড়া যাচ্ছে না।"); return; }
     if (!ACCEPTED_TYPES.includes(audioFile.type)) {
       setMessage("Use a WAV, MP3, FLAC, or OGG audio file.");
       return;
@@ -419,11 +472,13 @@ export default function Home() {
     }
 
     try {
-      await requestVoiceClone(profile.data.id);
+      await runMayaClone("আমার কণ্ঠে বাংলা অডিও পরীক্ষা করা হচ্ছে।", audioFile, referenceText.trim(), "bn");
+      await updateVoiceProfileStatus(profile.data.id, "ready");
     } catch (error) {
+      await updateVoiceProfileStatus(profile.data.id, "failed").catch(() => undefined);
       await loadProfiles(profile.data.id);
       setBusy(false);
-      setMessage("নমুনা ও সম্মতি সংরক্ষিত হয়েছে, কিন্তু ভয়েস ক্লোন তৈরি হয়নি। Voice Library থেকে আবার চেষ্টা করো। " + (error instanceof Error ? error.message : ""));
+      setMessage("নমুনা ও সম্মতি সংরক্ষিত হয়েছে, কিন্তু ভয়েস ক্লোন তৈরি হয়নি। " + (error instanceof Error ? error.message : ""));
       return;
     }
 
@@ -517,12 +572,12 @@ export default function Home() {
             <p className="small" style={{marginBottom:14}}>তোমার অনুমোদিত voice profile ব্যবহার করে বাংলা লেখা থেকে অডিও তৈরি করো। সর্বোচ্চ ১২০০ অক্ষর।</p>
             <label>মালিকানা যাচাইয়ের Voice Profile</label>
             <select className="field" value={selectedProfileId} onChange={e=>setSelectedProfileId(e.target.value)} disabled={profiles.length===0}>
-              {profiles.length===0 ? <option value="">আগে Voice Library-তে voice sample যোগ করো</option> : profiles.map(profile=><option key={profile.id} value={profile.id}>{profile.name}</option>)}
+              {profiles.filter(profile=>profile.status==="ready" && profile.reference_text && profile.source_audio_path).length===0 ? <option value="">আগে একটি প্রস্তুত Voice Profile তৈরি করো</option> : profiles.map(profile=><option key={profile.id} value={profile.id} disabled={profile.status!=="ready" || !profile.reference_text || !profile.source_audio_path}>{profile.name} · {profile.status==="ready"?"প্রস্তুত":profile.status==="processing"?"প্রসেসিং":"আবার নমুনা প্রয়োজন"}</option>)}
             </select>
             <label>যে বাংলা লেখা বলাতে চাও</label>
             <textarea className="field" rows={5} maxLength={1200} value={speechText} onChange={e=>setSpeechText(e.target.value)} placeholder="এখানে বাংলা লেখা লিখুন… যেমন: আসসালামু আলাইকুম। ক্রিওভান্তায় আপনাকে স্বাগতম।" style={{resize:"vertical",lineHeight:1.7}} />
             <div className="small" style={{textAlign:"right",marginTop:-8,marginBottom:14}}>{speechText.length}/{1200}</div>
-            <button className="btn" style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9}} onClick={generateSpeech} disabled={generating || !profiles.length || !speechText.trim()}><AudioLines size={17}/>{generating?"অডিও তৈরি হচ্ছে…":"অডিও তৈরি করুন"}</button>
+            <button className="btn" style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9}} onClick={generateSpeech} disabled={generating || !profiles.some(profile=>profile.status==="ready" && profile.reference_text && profile.source_audio_path) || !speechText.trim()}><AudioLines size={17}/>{generating?"অডিও তৈরি হচ্ছে…":"অডিও তৈরি করুন"}</button>
             {audioUrl && <div className="feature" style={{marginTop:16,padding:16}}>
               <b>তোমার তৈরি অডিও</b>
               <audio controls src={audioUrl} style={{width:"100%",marginTop:12}} />
