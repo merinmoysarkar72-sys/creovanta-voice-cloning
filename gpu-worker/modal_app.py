@@ -16,7 +16,6 @@ from urllib.parse import urlparse
 
 import httpx
 import modal
-import soundfile as sf
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -100,6 +99,7 @@ def serve():
     # Loading happens inside the GPU container. The persistent volume caches
     # model weights, Mimi and ECAPA assets between scale-to-zero restarts.
     from maya3 import Maya3TTS
+    import soundfile as sf
 
     os.environ.setdefault("HF_HOME", "/model-cache/huggingface")
     tts = Maya3TTS.from_pretrained(MODEL_ID, max_seats=1)
