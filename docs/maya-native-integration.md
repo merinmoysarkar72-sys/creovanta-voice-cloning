@@ -1,13 +1,12 @@
-# Maya 2 Native integration
+# Creovanta speech integration
 
-## Design
+## Request path
 
-- The retired provider has been removed; all active profiles use the Creovanta speech workflow.
-- New profiles are marked `provider = 'maya'` and keep the exact reference transcript in `reference_text`.
-- The browser signs in to Hugging Face using OAuth PKCE. The access token stays in React memory and is sent only over HTTPS in the `X-HF-Token` request header; Creovanta does not persist it.
-- The API verifies the Supabase user, profile ownership, accepted consent, private sample path, and Hugging Face token before calling the official `maya-research/maya2-native-studio` Space.
-- The Maya Space's `/clone_speak` endpoint receives the user's reference clip and transcript. Its response audio is returned to the browser; the private source clip remains in the Creovanta Supabase bucket.
-- The user's own Hugging Face identity is forwarded to the Space, so ZeroGPU usage is charged to that user's quota rather than a shared Creovanta token.
+- Creovanta is the product and user-facing brand.
+- The browser signs in to Hugging Face using OAuth PKCE. The access token stays in React memory and is never persisted by Creovanta.
+- Speech inference is initiated from the user's browser through the Gradio JavaScript client. The browser connects to the public Maya Research Studio Space and sends the user's OAuth token with the request. This keeps the ZeroGPU request on the user-facing path so Hugging Face can attach its per-request identity header and apply the visitor's own quota.
+- Render remains responsible for verifying the Supabase session, voice-profile ownership, accepted consent, and profile status. After the browser receives a valid clone-test audio file, it calls the protected status endpoint so Render can mark only that user's profile ready.
+- The private reference recording is downloaded from the user's Supabase private bucket in the browser and uploaded to the speech-processing Space for inference. It remains private in Creovanta storage, but a copy is sent to the external service for processing.
 
 ## Hugging Face OAuth
 
@@ -15,42 +14,49 @@ Creovanta publishes a Client ID Metadata Document at:
 
 `https://creovanta-omega.vercel.app/.well-known/oauth-cimd`
 
-It uses the Hugging Face-supported public OAuth + PKCE flow, with the production homepage as the exact redirect URI. No client secret is required. The browser requests `openid profile inference-api` scopes so the connected account can authorize inference requests to the Maya Space.
+It uses the Hugging Face-supported public OAuth + PKCE flow, with the production homepage as the exact redirect URI. No client secret is required. The browser requests `openid profile inference-api` scopes so the connected account can authorize inference requests.
 
-If the production domain changes, update the canonical URL in both this route and the browser's `connectHuggingFace` function, then register/allow the new redirect URI according to Hugging Face's current OAuth rules.
+If the production domain changes, update the canonical URL in both this route and the browser's `connectGenerationAccount` function, then register/allow the new redirect URI according to Hugging Face's current OAuth rules.
 
-## Database migration
+## Speech API contract
 
-Apply `supabase/migrations/20261115160346_maya_voice_profiles.sql` to the existing `creovanta-intelligence` Supabase project before using the new upload form. It adds:
+The public Studio exposes `/clone_speak` with eight positional inputs:
 
-- `provider`: all profiles are restricted to the Creovanta speech workflow.
-- `reference_text`: exact words spoken in the uploaded 3–10 second sample.
+1. Text to generate
+2. Reference audio file
+3. Exact reference transcript
+4. Reference clip language
+5. Output language
+6. Normalize numbers
+7. Seed
+8. Randomize seed
 
-The migration retains the existing provider/status guard and prevents ordinary authenticated users from changing a profile's provider or readiness state after insert.
+Creovanta calls it from the browser with Bengali output language (`bn`). The JavaScript client handles the file upload. Generated audio is downloaded from the Space's own file endpoint and saved only in the browser's local audio history.
 
-## Free quota and limits
+Render exposes `POST /api/v1/speech/voices/status` to record `ready` or `failed` after the browser-side clone smoke test. The endpoint re-checks the Supabase user, profile ownership, transcript, consent record, and Hugging Face token before changing status.
 
-- Hugging Face Free ZeroGPU quota is limited (currently documented as 5 GPU minutes/day); it resets 24 hours after the first GPU use.
-- Each clone test and each speech generation uses the connected user's quota.
-- Maya Studio caps speech text at 1,200 characters per request to stay within the Space's bounded request duration.
-- No Modal GPU, paid hardware, shared Hugging Face token, or payment method is used by this integration.
-- If a user's quota is exhausted, the API returns HTTP 429 and asks them to retry after reset.
+## Database
 
-## Voice privacy and consent
+The live project schema has the final Creovanta-only profile shape:
+- `reference_text` stores the exact transcript.
+- The old provider label and provider voice ID are absent.
+- `guard_voice_profile_status` protects readiness changes from ordinary authenticated clients.
+- Voice profiles, consent, generation and usage tables have RLS enabled with account-scoped policies.
 
-- Only upload the account owner's voice or a voice with explicit permission.
-- The sample is read from the user's private Supabase object using their Supabase session, then sent to the external Hugging Face Maya Space for inference.
-- The Space operator processes the reference audio and transcript and may temporarily keep uploads/results in its runtime upload area until cleanup. Retention is controlled by the Space operator, not Creovanta. Do not describe this external inference as on-device or as fully contained within Creovanta.
-- The Hugging Face OAuth access token is not stored by Creovanta; it exists only in page memory and is cleared on refresh, disconnect, or sign-out. Users must reconnect after refreshing the page.
-- Audio generated by Maya is returned with `Cache-Control: no-store`.
+The live schema already reflects the last two repository migrations, but the Supabase migration ledger currently lists only through `20261115160346`. Do not re-run the later DDL migrations blindly; reconcile migration history separately if a clean migration ledger is required.
 
-## Verification still required before production use
+## Limits and privacy
 
-1. Apply the migration and run Supabase security/performance advisors.
-2. Deploy the backend dependency and API changes to Render.
-3. Deploy the frontend OAuth metadata route and UI to Vercel.
-4. Connect a Hugging Face account and test with a 3–10 second voice sample owned by the tester, with its exact transcript.
-5. Verify that a clone test sets only that user's Maya profile to `ready`, that speech generation returns valid WAV audio, and that the user's ZeroGPU quota decreases.
-6. Confirm that existing Cartesia profiles continue to use their unchanged endpoints.
+- Maya Studio supports Bengali and other Indic languages, with a maximum text length of 1,200 characters per request.
+- The reference clip should be 3–10 seconds, clear, and contain one speaker.
+- Free Hugging Face ZeroGPU usage is limited and shared capacity may be unavailable; unlimited generation is not promised.
+- The Hugging Face OAuth token stays in page memory and is cleared on refresh, disconnect, or sign-out.
+- The sample audio, transcript, and generated text are processed by the external Space. Its operator controls runtime retention; Creovanta cannot guarantee deletion from that external runtime.
 
-The code is deliberately separated from the existing Cartesia routes. It is not production-ready until the end-to-end test above passes.
+## Verification still required
+
+1. Confirm the Vercel build passes after the Gradio JavaScript client dependency is installed.
+2. Confirm Render deploys the protected profile-status endpoint.
+3. Complete one end-to-end clone test with a 3–10 second voice sample and exact transcript.
+4. Generate and download Bengali WAV audio from a profile marked ready.
+5. Confirm that the user's Hugging Face quota is charged as expected.
