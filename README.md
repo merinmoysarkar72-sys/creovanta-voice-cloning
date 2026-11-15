@@ -20,6 +20,7 @@ The application UI and product credits use the Creovanta brand. Third-party infr
 - Reference audio and exact transcript are stored in account-scoped private storage.
 - Voice cloning and speech generation require a signed-in Creovanta account, an owned profile, and accepted consent.
 - Hugging Face authorization is held in the current browser page memory and is not intentionally persisted by Creovanta.
+- Render must have `SUPABASE_SERVICE_ROLE_KEY` configured privately for protected profile status updates and complete account deletion.
 - Generated audio history is stored locally on the user's device.
 - Account deletion is available in the app and at `/delete-account`.
 
