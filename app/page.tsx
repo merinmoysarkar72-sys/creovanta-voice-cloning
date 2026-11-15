@@ -4,6 +4,68 @@ import { useEffect, useState } from "react";
 import { ArrowRight, AudioLines, ShieldCheck, Sparkles, WandSparkles, Mic2, UploadCloud, LogOut } from "lucide-react";
 import { createClient, SupabaseClient, User } from "@supabase/supabase-js";
 
+
+type AudioHistoryItem = {
+  id: string;
+  userId: string;
+  text: string;
+  createdAt: string;
+  contentType: string;
+  blob: Blob;
+};
+
+const AUDIO_DB = "creovanta-audio-history";
+const AUDIO_STORE = "generated-audio";
+
+function openAudioDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(AUDIO_DB, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(AUDIO_STORE)) {
+        const store = db.createObjectStore(AUDIO_STORE, { keyPath: "id" });
+        store.createIndex("userId", "userId", { unique: false });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveAudioRecord(record: AudioHistoryItem) {
+  const db = await openAudioDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(AUDIO_STORE, "readwrite");
+    tx.objectStore(AUDIO_STORE).put(record);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
+
+async function getAudioRecords(userId: string): Promise<AudioHistoryItem[]> {
+  const db = await openAudioDb();
+  const records = await new Promise<AudioHistoryItem[]>((resolve, reject) => {
+    const tx = db.transaction(AUDIO_STORE, "readonly");
+    const request = tx.objectStore(AUDIO_STORE).index("userId").getAll(userId);
+    request.onsuccess = () => resolve(request.result as AudioHistoryItem[]);
+    request.onerror = () => reject(request.error);
+  });
+  db.close();
+  return records.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+async function removeAudioRecord(id: string) {
+  const db = await openAudioDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(AUDIO_STORE, "readwrite");
+    tx.objectStore(AUDIO_STORE).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
+
 type VoiceProfile = {
   id: string;
   name: string;
@@ -37,6 +99,8 @@ export default function Home() {
   const [generating, setGenerating] = useState(false);
   const [audioUrl, setAudioUrl] = useState("");
   const [audioExtension, setAudioExtension] = useState("wav");
+  const [audioHistory, setAudioHistory] = useState<Array<{id:string;text:string;createdAt:string;url:string;extension:string}>>([]);
+  const [historyMessage, setHistoryMessage] = useState("");
 
   useEffect(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -109,6 +173,26 @@ export default function Home() {
     return () => { if (audioUrl) URL.revokeObjectURL(audioUrl); };
   }, [audioUrl]);
 
+  useEffect(() => {
+    if (!user) { setAudioHistory([]); return; }
+    let cancelled = false;
+    getAudioRecords(user.id).then(records => {
+      if (cancelled) return;
+      setAudioHistory(records.map(record => ({ id: record.id, text: record.text, createdAt: record.createdAt, url: URL.createObjectURL(record.blob), extension: record.contentType.includes("mpeg") ? "mp3" : "wav" })));
+    }).catch(() => setHistoryMessage("এই ডিভাইসে অডিও হিস্ট্রি লোড করা যায়নি।"));
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  async function deleteHistoryItem(id: string) {
+    try {
+      const item = audioHistory.find(entry => entry.id === id);
+      if (item) URL.revokeObjectURL(item.url);
+      await removeAudioRecord(id);
+      setAudioHistory(current => current.filter(item => item.id !== id));
+      setHistoryMessage("অডিও হিস্ট্রি থেকে মুছে ফেলা হয়েছে।");
+    } catch { setHistoryMessage("অডিও মুছতে সমস্যা হয়েছে।"); }
+  }
+
   async function generateSpeech() {
     if (!supabase || !user) return;
     const transcript = speechText.trim();
@@ -138,6 +222,14 @@ export default function Home() {
       const nextUrl = URL.createObjectURL(new Blob([blob], { type: contentType }));
       setAudioExtension(extension);
       setAudioUrl(nextUrl);
+      const record: AudioHistoryItem = { id: crypto.randomUUID(), userId: user.id, text: transcript, createdAt: new Date().toISOString(), contentType, blob };
+      try {
+        await saveAudioRecord(record);
+        setAudioHistory(current => [{ id: record.id, text: transcript, createdAt: record.createdAt, url: URL.createObjectURL(blob), extension }, ...current]);
+        setHistoryMessage("এই ডিভাইসে অডিওটি হিস্ট্রিতে সংরক্ষিত হয়েছে।");
+      } catch {
+        setHistoryMessage("অডিও তৈরি হয়েছে, তবে ডিভাইসের স্টোরেজে হিস্ট্রি সংরক্ষণ করা যায়নি।");
+      }
       setMessage("অডিও তৈরি হয়েছে। নিচে শুনতে ও ডাউনলোড করতে পারো।");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "অজানা সমস্যায় অডিও তৈরি হয়নি।");
@@ -295,6 +387,22 @@ export default function Home() {
               <b>তোমার তৈরি অডিও</b>
               <audio controls src={audioUrl} style={{width:"100%",marginTop:12}} />
               <a className="btn secondary" href={audioUrl} download={"creovanta-bengali-voice." + audioExtension} style={{display:"inline-block",marginTop:12}}>অডিও ডাউনলোড</a>
+            </div>}
+          </div>
+          <div style={{marginTop:28,borderTop:"1px solid #293044",paddingTop:22}}>
+            <h3 style={{fontSize:20,letterSpacing:"-.5px"}}>অডিও হিস্ট্রি</h3>
+            <p className="small" style={{marginBottom:14}}>তৈরি করা অডিও এই ডিভাইসের ব্রাউজারে সংরক্ষিত থাকবে। অন্য ডিভাইসে দেখা যাবে না।</p>
+            {historyMessage && <div className="small" role="status" style={{marginBottom:12}}>{historyMessage}</div>}
+            {audioHistory.length===0 ? <p className="small">এখনো কোনো অডিও সংরক্ষিত হয়নি।</p> : <div style={{display:"grid",gap:12}}>
+              {audioHistory.map(item=><div key={item.id} className="feature" style={{padding:16}}>
+                <div className="small">{new Date(item.createdAt).toLocaleString()}</div>
+                <p style={{lineHeight:1.6,margin:"8px 0",whiteSpace:"pre-wrap"}}>{item.text}</p>
+                <audio controls src={item.url} style={{width:"100%"}} />
+                <div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:10}}>
+                  <a className="btn secondary" href={item.url} download={"creovanta-audio."+item.extension}>ডাউনলোড</a>
+                  <button className="btn secondary" onClick={()=>deleteHistoryItem(item.id)}>মুছে ফেলুন</button>
+                </div>
+              </div>)}
             </div>}
           </div>
           <div style={{marginTop:28,borderTop:"1px solid #293044",paddingTop:22}}>
