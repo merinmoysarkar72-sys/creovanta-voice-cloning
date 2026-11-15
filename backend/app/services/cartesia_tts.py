@@ -40,53 +40,6 @@ def _bearer_token(authorization: str | None) -> str:
     return token.strip()
 
 
-async def _authorized_owner(token: str) -> tuple[str, str, str]:
-    supabase_url = _required_env("SUPABASE_URL").rstrip("/")
-    anon_key = _required_env("SUPABASE_ANON_KEY")
-    owner_id = _required_env("CARTESIA_OWNER_USER_ID")
-    cartesia_key = _required_env("CARTESIA_API_KEY")
-    voice_id = _required_env("CARTESIA_VOICE_ID")
-
-    try:
-        UUID(owner_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=503, detail="CARTESIA_OWNER_USER_ID must be a UUID") from exc
-
-    headers = {
-        "apikey": anon_key,
-        "Authorization": f"Bearer {token}",
-    }
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
-            auth_response = await client.get(f"{supabase_url}/auth/v1/user", headers=headers)
-            if auth_response.status_code == 401:
-                raise HTTPException(status_code=401, detail="Your session is invalid or expired")
-            auth_response.raise_for_status()
-            user = auth_response.json()
-            user_id = user.get("id")
-            if user_id != owner_id:
-                raise HTTPException(status_code=403, detail="This voice is restricted to its owner")
-
-            profile_response = await client.get(
-                f"{supabase_url}/rest/v1/voice_profiles",
-                params={
-                    "id": f"eq.{user_profile_id_placeholder}",
-                    "user_id": f"eq.{user_id}",
-                    "select": "id",
-                },
-                headers={**headers, "Accept": "application/json"},
-            )
-            profile_response.raise_for_status()
-            if not profile_response.json():
-                raise HTTPException(status_code=404, detail="Voice profile not found for this account")
-
-            return cartesia_key, voice_id, user_id
-    except HTTPException:
-        raise
-    except (httpx.HTTPError, ValueError) as exc:
-        raise HTTPException(status_code=503, detail="Could not verify your account with Supabase") from exc
-
-
 @router.post("/tts")
 async def generate_speech(
     request: TTSRequest,
