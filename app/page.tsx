@@ -181,7 +181,8 @@ export default function Home() {
 
   async function runMayaClone(text: string, sample: Blob, transcript: string, referenceLanguage = "bn") {
     if (!hfAccessToken) throw new Error("আগে generation account connect করো।");
-    const client = await Client.connect(MAYA_SPACE, { token: hfAccessToken });
+    if (!hfAccessToken.startsWith("hf_")) throw new Error("Generation account token is invalid. Reconnect and try again.");
+    const client = await Client.connect(MAYA_SPACE, { token: hfAccessToken as `hf_${string}` });
     const result = await client.predict("/clone_speak", [
       text,
       handle_file(sample),
