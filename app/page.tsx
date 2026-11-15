@@ -74,7 +74,6 @@ type VoiceProfile = {
   language_code: string;
   status: string;
   consent_type: "self" | "authorized";
-  provider: "maya";
   reference_text: string | null;
   created_at: string;
 };
@@ -151,7 +150,7 @@ export default function Home() {
     if (!supabase || !user) return;
     const { data, error } = await supabase
       .from("voice_profiles")
-      .select("id,name,description,language_code,status,consent_type,provider,reference_text,created_at")
+      .select("id,name,description,language_code,status,consent_type,reference_text,created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
     if (error) setMessage("Could not load your voice library: " + error.message);
@@ -390,7 +389,6 @@ export default function Home() {
       name: voiceName.trim(),
       description: voiceDescription.trim() || null,
       language_code: "bn",
-      provider: "maya",
       reference_text: referenceText.trim(),
       source_audio_path: objectPath,
       consent_type: consentType,
@@ -408,7 +406,7 @@ export default function Home() {
       user_id: user.id,
       voice_profile_id: profile.data.id,
       consent_type: consentType,
-      consent_text_version: "creovanta-consent-v2-hf-maya",
+      consent_text_version: "creovanta-consent-v3",
       accepted: true,
     });
 
@@ -446,7 +444,7 @@ export default function Home() {
   return <main>
     <div className="wrap">
       <nav className="nav">
-        <a className="brand" href="#"><span className="logo">C</span> creovanta</a>
+        <a className="brand" href="#"><span className="logo">C</span> Creovanta</a>
         <div className="navlinks">
           <a href="#features">Features</a><a href="#safety">Safety</a>
           {user ? <button className="btn secondary" onClick={signOut}><LogOut size={15} style={{verticalAlign:"middle",marginRight:6}}/>Sign out</button> : <a className="btn" href="#account">Get started</a>}
@@ -554,7 +552,7 @@ export default function Home() {
                 <div><b>{profile.name}</b><div className="small">{profile.description || "Bengali voice sample"} · {new Date(profile.created_at).toLocaleDateString()}</div></div>
                 <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                   <span className="small">{profile.status==="ready"?"প্রস্তুত":profile.status==="processing"?"প্রসেসিং":profile.status==="failed"?"ব্যর্থ":"অপেক্ষমাণ"}</span>
-                  {profile.status!=="ready" && <button className="btn secondary" disabled={busy} onClick={()=>retryVoiceClone(profile.id)}>আবার চেষ্টা</button>}
+                  {profile.status!=="ready" && (profile.reference_text ? <button className="btn secondary" disabled={busy} onClick={()=>retryVoiceClone(profile.id)}>আবার চেষ্টা</button> : <span className="small">নতুন নমুনা প্রয়োজন</span>)}
                 </div>
               </div>)}
             </div>}
