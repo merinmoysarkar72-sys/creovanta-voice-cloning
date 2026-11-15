@@ -36,6 +36,7 @@ export default function Home() {
   const [speechText, setSpeechText] = useState("");
   const [generating, setGenerating] = useState(false);
   const [audioUrl, setAudioUrl] = useState("");
+  const [audioExtension, setAudioExtension] = useState("wav");
 
   useEffect(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -132,7 +133,10 @@ export default function Home() {
       }
       const blob = await response.blob();
       if (!blob.size) throw new Error("সার্ভার খালি অডিও পাঠিয়েছে।");
-      const nextUrl = URL.createObjectURL(blob);
+      const contentType = response.headers.get("content-type") || blob.type;
+      const extension = contentType.includes("mpeg") ? "mp3" : "wav";
+      const nextUrl = URL.createObjectURL(new Blob([blob], { type: contentType }));
+      setAudioExtension(extension);
       setAudioUrl(nextUrl);
       setMessage("অডিও তৈরি হয়েছে। নিচে শুনতে ও ডাউনলোড করতে পারো।");
     } catch (error) {
@@ -290,7 +294,7 @@ export default function Home() {
             {audioUrl && <div className="feature" style={{marginTop:16,padding:16}}>
               <b>তোমার তৈরি অডিও</b>
               <audio controls src={audioUrl} style={{width:"100%",marginTop:12}} />
-              <a className="btn secondary" href={audioUrl} download="creovanta-bengali-voice.wav" style={{display:"inline-block",marginTop:12}}>অডিও ডাউনলোড</a>
+              <a className="btn secondary" href={audioUrl} download={"creovanta-bengali-voice." + audioExtension} style={{display:"inline-block",marginTop:12}}>অডিও ডাউনলোড</a>
             </div>}
           </div>
           <div style={{marginTop:28,borderTop:"1px solid #293044",paddingTop:22}}>
