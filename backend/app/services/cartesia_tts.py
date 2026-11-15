@@ -9,7 +9,7 @@ import os
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
