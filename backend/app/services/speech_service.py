@@ -57,7 +57,7 @@ def _bearer_token(authorization: str | None) -> str:
 def _hf_token(value: str | None) -> str:
     token = (value or "").strip()
     if not token or len(token) > 4096 or not token.startswith("hf_"):
-        raise HTTPException(status_code=401, detail="Connect your Hugging Face account first")
+        raise HTTPException(status_code=401, detail="Connect your generation account first")
     return token
 
 
@@ -85,7 +85,7 @@ async def _verify_hf_token(client: httpx.AsyncClient, token: str) -> None:
     if response.status_code in (401, 403):
         raise HTTPException(status_code=401, detail="Your generation account connection expired. Connect again.")
     if not response.is_success:
-        raise HTTPException(status_code=502, detail="Could not verify the Hugging Face account")
+        raise HTTPException(status_code=502, detail="Could not verify the generation account")
 
 
 async def _get_owned_profile(
@@ -221,7 +221,7 @@ async def _generate_speech_audio(
             if "quota" in message or "exceeded" in message:
                 raise HTTPException(
                     status_code=429,
-                    detail="Your free Hugging Face daily GPU quota may be exhausted. Try again after it resets.",
+                    detail="Your daily generation allowance may be exhausted. Try again after it resets.",
                 ) from exc
             raise HTTPException(
                 status_code=502,
@@ -317,7 +317,7 @@ async def clone_voice(
                 pass
         raise
     except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail="Could not reach Supabase or Hugging Face") from exc
+        raise HTTPException(status_code=502, detail="Could not reach Creovanta speech service or account data service") from exc
 
 
 @router.post("/tts")
