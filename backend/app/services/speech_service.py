@@ -10,7 +10,7 @@ import asyncio
 import os
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import quote, urljoin, urlparse
 from uuid import UUID
 
@@ -36,6 +36,11 @@ class SpeechRequest(BaseModel):
 
 class CloneRequest(BaseModel):
     voice_profile_id: UUID
+
+
+class VoiceStatusRequest(BaseModel):
+    voice_profile_id: UUID
+    status: Literal["ready", "failed"]
 
 
 def _required_env(name: str) -> str:
@@ -263,6 +268,39 @@ async def _set_profile_status(
         json={"status": status},
     )
     response.raise_for_status()
+
+
+@router.post("/voices/status")
+async def update_voice_status(
+    request: VoiceStatusRequest,
+    authorization: str | None = Header(default=None),
+    hf_token_header: str | None = Header(default=None, alias="X-HF-Token"),
+) -> dict[str, str]:
+    """Record the result of a browser-side, user-attributed Maya clone test."""
+    token = _bearer_token(authorization)
+    hf_token = _hf_token(hf_token_header)
+    supabase_url = _required_env("SUPABASE_URL").rstrip("/")
+    anon_key = _required_env("SUPABASE_ANON_KEY")
+    service_key = _required_env("SUPABASE_SERVICE_ROLE_KEY")
+    user_headers = _user_headers(anon_key, token)
+
+    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
+        user_id = await _authenticated_user(client, supabase_url, user_headers)
+        await _verify_hf_token(client, hf_token)
+        profile = await _get_owned_profile(
+            client, supabase_url, user_headers, request.voice_profile_id, user_id
+        )
+        await _check_consent(
+            client, supabase_url, user_headers, request.voice_profile_id, user_id
+        )
+        if request.status == "ready" and (
+            not profile.get("source_audio_path") or not profile.get("reference_text")
+        ):
+            raise HTTPException(status_code=422, detail="A private reference clip and exact transcript are required")
+        await _set_profile_status(
+            client, supabase_url, service_key, request.voice_profile_id, user_id, request.status
+        )
+    return {"status": request.status, "message": "Voice profile status updated"}
 
 
 @router.post("/voices/clone")
