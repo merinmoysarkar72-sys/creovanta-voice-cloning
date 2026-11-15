@@ -217,6 +217,8 @@ async def _generate_maya_audio(
                 reference_language,
             )
         except Exception as exc:
+            diagnostic = str(exc).replace(hf_token, "[redacted]")[:800]
+            print(f"[maya2] clone_speak failed: {type(exc).__name__}: {diagnostic}", flush=True)
             message = str(exc).lower()
             if "quota" in message or "exceeded" in message:
                 raise HTTPException(
