@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.services.cartesia_tts import router as cartesia_router
+from app.services.maya_studio import router as maya_router
 from app.services.worker_client import worker_health
 
 
@@ -35,13 +36,14 @@ app = FastAPI(
 )
 
 app.include_router(cartesia_router)
+app.include_router(maya_router)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-HF-Token"],
 )
 
 
