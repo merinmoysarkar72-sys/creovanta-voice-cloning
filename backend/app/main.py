@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.services.account import router as account_router
 from app.services.cartesia_tts import router as cartesia_router
 from app.services.maya_studio import router as maya_router
 from app.services.worker_client import worker_health
@@ -35,6 +36,7 @@ app = FastAPI(
     version="0.2.0",
 )
 
+app.include_router(account_router)
 app.include_router(cartesia_router)
 app.include_router(maya_router)
 
