@@ -280,7 +280,7 @@ async def clone_voice(
     user_headers = _user_headers(anon_key, token)
 
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=240, write=60)) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(240.0, connect=10.0, write=60.0)) as client:
             user_id = await _authenticated_user(client, supabase_url, user_headers)
             await _verify_hf_token(client, hf_token)
             profile = await _get_owned_profile(
@@ -334,7 +334,7 @@ async def generate_speech(
     user_headers = _user_headers(anon_key, token)
 
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=240, write=60)) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(240.0, connect=10.0, write=60.0)) as client:
             user_id = await _authenticated_user(client, supabase_url, user_headers)
             await _verify_hf_token(client, hf_token)
             profile = await _get_owned_profile(
