@@ -208,7 +208,7 @@ export default function Home() {
     if (input) input.value = "";
     await loadProfiles();
     setBusy(false);
-    setMessage("Voice sample saved privately. The voice model is not connected yet, so cloning is not active.");
+    setMessage("Voice sample saved privately. You can now use Text-to-Speech with your connected Cartesia voice.");
   }
 
   const bars = [18,32,48,26,62,84,45,28,70,94,58,34,76,50,22,64,86,42,26,56,72,38,18,48,66,30,52,82,40,20,60,34,76,46,24,58,88,42,18,50];
@@ -239,7 +239,7 @@ export default function Home() {
           <div style={{padding:"24px 0 8px",display:"flex",alignItems:"center",gap:12}}><div className="icon"><AudioLines/></div><div><b style={{fontSize:15}}>Your Voice Library</b><div className="small">Private voice profiles and samples</div></div></div>
           <div className="wave">{bars.map((h,i)=><i key={i} style={{"--h":h+"px"} as React.CSSProperties}/>)}</div>
           <div style={{display:"flex",justifyContent:"space-between"}}><span className="small">Waveform preview</span><span className="small">Private by default</span></div>
-          <div style={{borderTop:"1px solid #293044",marginTop:24,paddingTop:20,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span className="small">Speech engine</span><span className="small">Integration in progress</span></div>
+          <div style={{borderTop:"1px solid #293044",marginTop:24,paddingTop:20,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span className="small">Speech engine</span><span className="small">Cartesia connected · first audio test pending</span></div>
         </div>
       </section>
 
@@ -278,8 +278,8 @@ export default function Home() {
           <button className="btn" style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9}} onClick={uploadVoice} disabled={busy}><UploadCloud size={17}/>{busy?"Please wait…":"Save private voice sample"}</button>
           <div style={{marginTop:28,borderTop:"1px solid #293044",paddingTop:22}}>
             <h3 style={{fontSize:20,letterSpacing:"-.5px"}}>বাংলা Text-to-Speech</h3>
-            <p className="small" style={{marginBottom:14}}>তোমার অনুমোদিত voice profile বেছে নিয়ে বাংলা লেখা থেকে অডিও তৈরি করো। প্রতি অনুরোধে সর্বোচ্চ ২০০০ অক্ষর।</p>
-            <label>কোন কণ্ঠ ব্যবহার করবে?</label>
+            <p className="small" style={{marginBottom:14}}>তোমার Cartesia-তে ক্লোন করা কণ্ঠে বাংলা লেখা থেকে অডিও তৈরি করো। নির্বাচিত profile দিয়ে মালিকানা ও সম্মতি যাচাই হবে। সর্বোচ্চ ২০০০ অক্ষর।</p>
+            <label>মালিকানা যাচাইয়ের Voice Profile</label>
             <select className="field" value={selectedProfileId} onChange={e=>setSelectedProfileId(e.target.value)} disabled={profiles.length===0}>
               {profiles.length===0 ? <option value="">আগে Voice Library-তে voice sample যোগ করো</option> : profiles.map(profile=><option key={profile.id} value={profile.id}>{profile.name}</option>)}
             </select>
@@ -298,7 +298,7 @@ export default function Home() {
             {profiles.length===0 ? <p className="small">No voice profiles saved yet.</p> : <div style={{display:"grid",gap:10}}>
               {profiles.map(profile=><div key={profile.id} className="feature" style={{padding:16,display:"flex",justifyContent:"space-between",gap:12,alignItems:"center"}}>
                 <div><b>{profile.name}</b><div className="small">{profile.description || "Bengali voice sample"} · {new Date(profile.created_at).toLocaleDateString()}</div></div>
-                <span className="small">{profile.status==="processing"?"Saved · engine pending":profile.status}</span>
+                <span className="small">{profile.status==="processing"?"Sample saved":profile.status}</span>
               </div>)}
             </div>}
           </div>
