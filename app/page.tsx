@@ -162,7 +162,7 @@ export default function Home() {
     }
   }
 
-  async function connectHuggingFace() {
+  async function connectGenerationAccount() {
     try {
       const clientId = "https://creovanta-omega.vercel.app/.well-known/oauth-cimd";
       const redirectUrl = "https://creovanta-omega.vercel.app/";
@@ -173,7 +173,7 @@ export default function Home() {
     }
   }
 
-  function disconnectHuggingFace() {
+  function disconnectGenerationAccount() {
     setHfAccessToken("");
     setHfUsername("");
     setMessage("Generation account disconnected from this browser session.");
@@ -274,7 +274,6 @@ export default function Home() {
   async function generateSpeech() {
     if (!supabase || !user) return;
     const transcript = speechText.trim();
-    const selectedProfile = profiles.find(profile => profile.id === selectedProfileId);
     if (!hfAccessToken) { setMessage("আগে generation account connect করো।"); return; }
     if (!selectedProfileId) { setMessage("আগে Voice Library থেকে একটি voice profile নির্বাচন করুন।"); return; }
     if (!transcript) { setMessage("বাংলা লেখা লিখুন।"); return; }
@@ -286,16 +285,15 @@ export default function Home() {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
       if (sessionError || !accessToken) throw new Error("সেশন শেষ হয়েছে। আবার sign in করো।");
-      const isMaya = true;
       const requestHeaders: Record<string, string> = { "Authorization": "Bearer " + accessToken, "Content-Type": "application/json" };
-      if (isMaya) requestHeaders["X-HF-Token"] = hfAccessToken;
-      const response = await fetch(isMaya ? "https://creovanta-api.onrender.com/api/v1/maya/tts" : "https://creovanta-api.onrender.com/api/v1/tts", {
+      requestHeaders["X-HF-Token"] = hfAccessToken;
+      const response = await fetch("https://creovanta-api.onrender.com/api/v1/maya/tts", {
         method: "POST",
         headers: requestHeaders,
         body: JSON.stringify({ voice_profile_id: selectedProfileId, text: transcript }),
       });
       if (!response.ok) {
-        if (isMaya && response.status === 401) { setHfAccessToken(""); setHfUsername(""); }
+        if (response.status === 401) { setHfAccessToken(""); setHfUsername(""); }
         let detail = "অডিও তৈরি হয়নি (HTTP " + response.status + ")";
         try { const body = await response.json(); detail = body.detail || detail; } catch {}
         throw new Error(detail);
@@ -363,7 +361,7 @@ export default function Home() {
   async function uploadVoice() {
     if (!supabase || !user) return;
     if (!voiceName.trim()) { setMessage("Give this voice profile a name."); return; }
-    if (!hfAccessToken) { setMessage("আগে Hugging Face account connect করো।"); return; }
+    if (!hfAccessToken) { setMessage("আগে generation account connect করো।"); return; }
     if (!referenceText.trim()) { setMessage("রেকর্ডিংয়ে যা বলা হয়েছে, তার হুবহু transcript লিখুন।"); return; }
     if (!audioFile) { setMessage("Choose an audio file first."); return; }
     if (!consentAccepted) { setMessage("You must confirm voice ownership or explicit permission."); return; }
@@ -498,7 +496,7 @@ export default function Home() {
           <div className="feature" style={{padding:16,marginBottom:18}}>
             <b>Creovanta Speech Studio</b>
             <p className="small" style={{margin:"8px 0 12px"}}>{hfAccessToken ? "Connected as " + hfUsername + ". Your own free daily GPU quota is used; the token stays only in this open page and is cleared on refresh. Creovanta does not store it." : "Connect your generation account to enable your personal daily processing allowance. No payment card is required."}</p>
-            {hfAccessToken ? <button className="btn secondary" onClick={disconnectHuggingFace}>Disconnect Hugging Face</button> : <button className="btn" onClick={connectHuggingFace}>Connect Hugging Face</button>}
+            {hfAccessToken ? <button className="btn secondary" onClick={disconnectGenerationAccount}>Disconnect generation account</button> : <button className="btn" onClick={connectGenerationAccount}>Connect generation account</button>}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14}}>
             <div><label>Voice profile name</label><input className="field" value={voiceName} onChange={e=>setVoiceName(e.target.value)} placeholder="e.g. My Bengali Voice"/></div>
