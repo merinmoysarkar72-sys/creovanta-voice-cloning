@@ -387,7 +387,7 @@ export default function Home() {
     try {
       await requestVoiceClone(profile.data.id, "maya");
     } catch (error) {
-      await loadProfiles();
+      await loadProfiles(profile.data.id);
       setBusy(false);
       setMessage("নমুনা ও সম্মতি সংরক্ষিত হয়েছে, কিন্তু ভয়েস ক্লোন তৈরি হয়নি। Voice Library থেকে আবার চেষ্টা করো। " + (error instanceof Error ? error.message : ""));
       return;
