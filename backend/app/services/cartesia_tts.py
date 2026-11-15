@@ -59,7 +59,7 @@ async def generate_speech(
 
     user_headers = {"apikey": anon_key, "Authorization": f"Bearer {token}"}
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(45.0)) as client:
             auth_response = await client.get(f"{supabase_url}/auth/v1/user", headers=user_headers)
             if auth_response.status_code == 401:
                 raise HTTPException(status_code=401, detail="Your session is invalid or expired")
@@ -109,7 +109,8 @@ async def generate_speech(
                     "voice": {"mode": "id", "id": voice_id},
                     "language": "bn",
                     "output_format": {
-                        "container": "mp3",
+                        "container": "wav",
+                        "encoding": "pcm_s16le",
                         "sample_rate": 44100,
                     },
                 },
@@ -123,9 +124,9 @@ async def generate_speech(
 
             return Response(
                 content=tts_response.content,
-                media_type="audio/mpeg",
+                media_type="audio/wav",
                 headers={
-                    "Content-Disposition": 'inline; filename="creovanta-speech.mp3"',
+                    "Content-Disposition": 'inline; filename="creovanta-speech.wav"',
                     "Cache-Control": "no-store",
                     "X-Content-Type-Options": "nosniff",
                 },

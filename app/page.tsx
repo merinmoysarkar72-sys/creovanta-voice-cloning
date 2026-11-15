@@ -32,6 +32,10 @@ export default function Home() {
   const [consentType, setConsentType] = useState<"self" | "authorized">("self");
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [selectedProfileId, setSelectedProfileId] = useState("");
+  const [speechText, setSpeechText] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [audioUrl, setAudioUrl] = useState("");
 
   useEffect(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -65,7 +69,11 @@ export default function Home() {
       .select("id,name,description,language_code,status,consent_type,created_at")
       .order("created_at", { ascending: false });
     if (error) setMessage("Could not load your voice library: " + error.message);
-    else setProfiles((data ?? []) as VoiceProfile[]);
+    else {
+      const nextProfiles = (data ?? []) as VoiceProfile[];
+      setProfiles(nextProfiles);
+      setSelectedProfileId((current) => current || nextProfiles[0]?.id || "");
+    }
   }
 
   async function authenticate() {
@@ -94,6 +102,44 @@ export default function Home() {
     setUser(null);
     setProfiles([]);
     setMessage("You have signed out.");
+  }
+
+  useEffect(() => {
+    return () => { if (audioUrl) URL.revokeObjectURL(audioUrl); };
+  }, [audioUrl]);
+
+  async function generateSpeech() {
+    if (!supabase || !user) return;
+    const transcript = speechText.trim();
+    if (!selectedProfileId) { setMessage("আগে Voice Library থেকে একটি voice profile নির্বাচন করুন।"); return; }
+    if (!transcript) { setMessage("বাংলা লেখা লিখুন।"); return; }
+    if (transcript.length > 2000) { setMessage("সর্বোচ্চ ২০০০ অক্ষর লেখা যাবে।"); return; }
+    setGenerating(true);
+    setMessage("তোমার ক্লোন করা কণ্ঠে অডিও তৈরি হচ্ছে…");
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (sessionError || !accessToken) throw new Error("সেশন শেষ হয়েছে। আবার sign in করো।");
+      const response = await fetch("https://creovanta-api.onrender.com/api/v1/tts", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + accessToken, "Content-Type": "application/json" },
+        body: JSON.stringify({ voice_profile_id: selectedProfileId, text: transcript }),
+      });
+      if (!response.ok) {
+        let detail = "অডিও তৈরি হয়নি (HTTP " + response.status + ")";
+        try { const body = await response.json(); detail = body.detail || detail; } catch {}
+        throw new Error(detail);
+      }
+      const blob = await response.blob();
+      if (!blob.size) throw new Error("সার্ভার খালি অডিও পাঠিয়েছে।");
+      const nextUrl = URL.createObjectURL(blob);
+      setAudioUrl(nextUrl);
+      setMessage("অডিও তৈরি হয়েছে। নিচে শুনতে ও ডাউনলোড করতে পারো।");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "অজানা সমস্যায় অডিও তৈরি হয়নি।");
+    } finally {
+      setGenerating(false);
+    }
   }
 
   async function uploadVoice() {
@@ -162,7 +208,7 @@ export default function Home() {
     if (input) input.value = "";
     await loadProfiles();
     setBusy(false);
-    setMessage("Voice sample saved privately. The voice model is not connected yet, so cloning is not active.");
+    setMessage("Voice sample saved privately. You can now use Text-to-Speech with your connected Cartesia voice.");
   }
 
   const bars = [18,32,48,26,62,84,45,28,70,94,58,34,76,50,22,64,86,42,26,56,72,38,18,48,66,30,52,82,40,20,60,34,76,46,24,58,88,42,18,50];
@@ -193,7 +239,7 @@ export default function Home() {
           <div style={{padding:"24px 0 8px",display:"flex",alignItems:"center",gap:12}}><div className="icon"><AudioLines/></div><div><b style={{fontSize:15}}>Your Voice Library</b><div className="small">Private voice profiles and samples</div></div></div>
           <div className="wave">{bars.map((h,i)=><i key={i} style={{"--h":h+"px"} as React.CSSProperties}/>)}</div>
           <div style={{display:"flex",justifyContent:"space-between"}}><span className="small">Waveform preview</span><span className="small">Private by default</span></div>
-          <div style={{borderTop:"1px solid #293044",marginTop:24,paddingTop:20,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span className="small">Speech engine</span><span className="small">Integration in progress</span></div>
+          <div style={{borderTop:"1px solid #293044",marginTop:24,paddingTop:20,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span className="small">Speech engine</span><span className="small">Cartesia connected · first audio test pending</span></div>
         </div>
       </section>
 
@@ -231,11 +277,28 @@ export default function Home() {
           </label>
           <button className="btn" style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9}} onClick={uploadVoice} disabled={busy}><UploadCloud size={17}/>{busy?"Please wait…":"Save private voice sample"}</button>
           <div style={{marginTop:28,borderTop:"1px solid #293044",paddingTop:22}}>
+            <h3 style={{fontSize:20,letterSpacing:"-.5px"}}>বাংলা Text-to-Speech</h3>
+            <p className="small" style={{marginBottom:14}}>তোমার Cartesia-তে ক্লোন করা কণ্ঠে বাংলা লেখা থেকে অডিও তৈরি করো। নির্বাচিত profile দিয়ে মালিকানা ও সম্মতি যাচাই হবে। সর্বোচ্চ ২০০০ অক্ষর।</p>
+            <label>মালিকানা যাচাইয়ের Voice Profile</label>
+            <select className="field" value={selectedProfileId} onChange={e=>setSelectedProfileId(e.target.value)} disabled={profiles.length===0}>
+              {profiles.length===0 ? <option value="">আগে Voice Library-তে voice sample যোগ করো</option> : profiles.map(profile=><option key={profile.id} value={profile.id}>{profile.name}</option>)}
+            </select>
+            <label>যে বাংলা লেখা বলাতে চাও</label>
+            <textarea className="field" rows={5} maxLength={2000} value={speechText} onChange={e=>setSpeechText(e.target.value)} placeholder="এখানে বাংলা লেখা লিখুন… যেমন: আসসালামু আলাইকুম। ক্রিওভান্তায় আপনাকে স্বাগতম।" style={{resize:"vertical",lineHeight:1.7}} />
+            <div className="small" style={{textAlign:"right",marginTop:-8,marginBottom:14}}>{speechText.length}/2000</div>
+            <button className="btn" style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9}} onClick={generateSpeech} disabled={generating || !profiles.length || !speechText.trim()}><AudioLines size={17}/>{generating?"অডিও তৈরি হচ্ছে…":"অডিও তৈরি করুন"}</button>
+            {audioUrl && <div className="feature" style={{marginTop:16,padding:16}}>
+              <b>তোমার তৈরি অডিও</b>
+              <audio controls src={audioUrl} style={{width:"100%",marginTop:12}} />
+              <a className="btn secondary" href={audioUrl} download="creovanta-bengali-voice.wav" style={{display:"inline-block",marginTop:12}}>অডিও ডাউনলোড</a>
+            </div>}
+          </div>
+          <div style={{marginTop:28,borderTop:"1px solid #293044",paddingTop:22}}>
             <h3 style={{fontSize:20,letterSpacing:"-.5px"}}>Your Voice Library</h3>
             {profiles.length===0 ? <p className="small">No voice profiles saved yet.</p> : <div style={{display:"grid",gap:10}}>
               {profiles.map(profile=><div key={profile.id} className="feature" style={{padding:16,display:"flex",justifyContent:"space-between",gap:12,alignItems:"center"}}>
                 <div><b>{profile.name}</b><div className="small">{profile.description || "Bengali voice sample"} · {new Date(profile.created_at).toLocaleDateString()}</div></div>
-                <span className="small">{profile.status==="processing"?"Saved · engine pending":profile.status}</span>
+                <span className="small">{profile.status==="processing"?"Sample saved":profile.status}</span>
               </div>)}
             </div>}
           </div>
