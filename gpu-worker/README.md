@@ -1,71 +1,121 @@
-# Creovanta GPU Worker (staged scaffold)
+# Creovanta GPU Worker — Maya 2 Native
 
-This is a separate Modal GPU service. Keep the existing Render FastAPI service
-lightweight; it remains responsible for Supabase JWT verification, ownership,
-consent, quotas, and job orchestration.
+This is the existing Modal app `creovanta-voice-worker`, now prepared to run
+Maya 2 Native for Bengali text-to-speech and consented voice cloning.
 
-## Current state
+## Current deployment state
 
-- Modal app and GPU-backed FastAPI endpoint scaffold are present.
-- `GET /health` reports infrastructure status separately from model status.
-- `POST /v1/generate` is authenticated and intentionally returns HTTP 503.
-- No model is loaded and no audio is generated yet. Do not connect production
-  traffic or advertise voice cloning as active.
+- The Modal app name and private worker-token authentication are preserved.
+- The worker loads `maya-research/maya2-native` on an NVIDIA L4 GPU by default.
+- Model, Mimi codec and ECAPA files are cached in the persistent
+  `creovanta-model-cache` Modal Volume.
+- The worker scales down after 300 seconds and is limited to one container.
+- `GET /health` reports `model_status: ready` only after the model has loaded.
+- `POST /v1/generate` returns a WAV file encoded in JSON as `audio_base64`.
+- Render is not yet switched to this worker. Keep the existing Cartesia route
+  untouched until a real Modal generation test succeeds.
 
-## Why generation is disabled
+## Model and voice mode
 
-The current candidate is `EMTIAZZ/chatterbox-bangla-tts`. Before enabling it:
-1. Verify commercial-use rights for the base model and all bundled components.
-2. Obtain confirmation of fine-tuning dataset provenance and checkpoint rights.
-3. Pin exact model and tokenizer revisions and verify checksums.
-4. Add a reviewed adapter and test using consented Bangladeshi Bengali samples.
-5. Validate reference audio duration, size, codec, signed-URL host, output storage,
-   job ownership, timeouts, and abuse limits end to end.
+Model: `maya-research/maya2-native`  
+Language: Bengali (`bn`)  
+Audio output: 24 kHz, mono, PCM 16-bit WAV.
+
+The current Creovanta upload flow does not collect the exact transcript of the
+reference recording. Therefore the worker uses Maya's `spk` (speaker-embedding
+only) mode, which does not invent a transcript. For the strongest cloning
+conditioning, a future UI update should collect the exact spoken transcript and
+use Maya's `icl_spk` mode.
+
+Use only the account owner's voice or a voice with explicit documented consent.
+Tell listeners when generated speech is synthetic.
+
+## Model installation
+
+The Modal image installs the upstream Maya 2 Native repository and its
+CUDA 12.8 dependencies. The Hugging Face model and supporting assets download
+on first container startup and persist in `creovanta-model-cache`.
+
+The default GPU is `L4`. The released model's documentation reports a 9.2 GB
+peak for one seat plus CUDA context; an L4 provides room for this configuration.
+The worker uses one generation seat and one maximum container to limit usage.
 
 ## Automated deployment
 
-A GitHub Actions workflow is included at
-`.github/workflows/deploy-gpu-worker.yml`. It runs only when manually started from the Actions **Run workflow** button.
-This avoids a failed automatic deployment before account secrets are configured.
+The GitHub Actions workflow is manually triggered from Actions →
+**Deploy Creovanta GPU Worker** → **Run workflow**.
 
-Before the first run, add these four repository Actions secrets in
-GitHub → Settings → Secrets and variables → Actions:
+Required repository Actions secrets:
 
-- `MODAL_TOKEN_ID`: Modal account token ID.
-- `MODAL_TOKEN_SECRET`: Modal account token secret.
-- `CREOVANTA_WORKER_TOKEN`: a long random secret used only for API-to-worker
-  authentication. Generate it locally with a password manager or a secure
-  random generator. Use the exact same value for Render's
-  `VOICE_ENGINE_API_KEY`.
-- `SUPABASE_URL`: the project's public Supabase project URL; used only to
-  restrict reference-audio URLs to the project's private Storage host.
+- `MODAL_TOKEN_ID`
+- `MODAL_TOKEN_SECRET`
+- `CREOVANTA_WORKER_TOKEN`
+- `SUPABASE_URL`
 
 The workflow creates/updates the Modal secret named `creovanta-worker` and
-deploys `gpu-worker/modal_app.py`. The Modal token values are consumed only
-by GitHub Actions and must never be committed or sent in chat.
+deploys `gpu-worker/modal_app.py`. Never paste any of these secrets into chat
+or commit them to Git.
 
-## Render configuration after Modal deployment
+## Render integration — do not switch yet
 
-After the workflow succeeds, copy the deployed Modal web endpoint URL into
-Render's protected environment variable `VOICE_ENGINE_URL`, and set
-`VOICE_ENGINE_API_KEY` to the same value as `CREOVANTA_WORKER_TOKEN`.
-Do not add either value to the Next.js browser environment. Render will
-redeploy when its environment is saved.
+After a successful Modal smoke test, copy the deployed Modal endpoint URL into
+Render's protected `VOICE_ENGINE_URL` variable. Set `VOICE_ENGINE_API_KEY`
+to the same secret value as `CREOVANTA_WORKER_TOKEN`.
+
+The Render worker client must then be updated to decode `audio_base64` and
+return the WAV response. This integration is intentionally not part of this
+staged worker change. Do not direct production traffic here before the smoke
+test and the Render adapter are complete.
 
 ## API contract
 
-- `GET /health`: infrastructure status; does not imply model readiness.
-- `POST /v1/generate`: bearer-authenticated JSON containing
-  `generation_id`, `voice_profile_id`, `text`, and a short-lived private
-  `reference_audio_url`. Currently returns 503 until the model adapter and
-  safety checks are implemented.
+All endpoints require `Authorization: Bearer <CREOVANTA_WORKER_TOKEN>`.
+
+### `GET /health`
+
+Reports infrastructure and model readiness. It does not expose credentials.
+
+### `POST /v1/generate`
+
+JSON request:
+
+```json
+{
+  "generation_id": "a-unique-generation-id",
+  "voice_profile_id": "the-owned-voice-profile-id",
+  "text": "বাংলা লেখা এখানে",
+  "reference_audio_url": "a-short-lived-private-Supabase-signed-URL"
+}
+```
+
+The signed URL must point to this project's private `voice-samples` bucket.
+Reference audio must decode successfully and be 3–30 seconds long; 3–10
+seconds is recommended.
+
+Successful response includes:
+
+- `status: ok`
+- `format: wav`
+- `sample_rate: 24000`
+- `channels: 1`
+- `audio_base64`: base64-encoded PCM 16-bit WAV.
 
 The Render API must call this endpoint server-to-server only. The browser must
 never receive the worker token or a Supabase service-role key.
 
-## Cost and rollout
+## Licensing and attribution
 
-The default GPU is L4, with a maximum of two containers and a 300-second
-scale-down window. Review Modal workspace billing and GPU availability before
-enabling production. The persistent model-cache volume is created by the app;
-model weights are not committed to Git.
+Maya 2 Native's engine and model are distributed under Apache-2.0 according to
+the upstream repository/model card. The bundled Mimi component is CC-BY-4.0;
+preserve its required attribution and all upstream license notices when
+redistributing. Review every upstream component's license before public
+commercial launch.
+
+Upstream: https://github.com/MayaResearch/maya2-native  
+Model: https://huggingface.co/maya-research/maya2-native
+
+## Cost
+
+Modal GPU time is not unlimited or guaranteed to be free. Check the current
+workspace credit balance and GPU pricing before deployment. Scale-down limits
+idle time but does not remove charges for startup, model loading, or generation.
