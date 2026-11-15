@@ -270,7 +270,7 @@ export default function Home() {
       language_code: "bn",
       source_audio_path: objectPath,
       consent_type: consentType,
-      status: "processing",
+      status: "ready",
     }).select("id").single();
 
     if (profile.error || !profile.data) {
@@ -304,7 +304,7 @@ export default function Home() {
     if (input) input.value = "";
     await loadProfiles();
     setBusy(false);
-    setMessage("Voice sample saved privately. You can now use Text-to-Speech with your connected Cartesia voice.");
+    setMessage("Creovanta Voice Profile প্রস্তুত। এখন এই Profile দিয়ে বাংলা Text-to-Speech ব্যবহার করতে পারো।");
   }
 
   const bars = [18,32,48,26,62,84,45,28,70,94,58,34,76,50,22,64,86,42,26,56,72,38,18,48,66,30,52,82,40,20,60,34,76,46,24,58,88,42,18,50];
