@@ -109,7 +109,8 @@ async def generate_speech(
                     "voice": {"mode": "id", "id": voice_id},
                     "language": "bn",
                     "output_format": {
-                        "container": "mp3",
+                        "container": "wav",
+                        "encoding": "pcm_s16le",
                         "sample_rate": 44100,
                     },
                 },
@@ -123,9 +124,9 @@ async def generate_speech(
 
             return Response(
                 content=tts_response.content,
-                media_type="audio/mpeg",
+                media_type="audio/wav",
                 headers={
-                    "Content-Disposition": 'inline; filename="creovanta-speech.mp3"',
+                    "Content-Disposition": 'inline; filename="creovanta-speech.wav"',
                     "Cache-Control": "no-store",
                     "X-Content-Type-Options": "nosniff",
                 },
