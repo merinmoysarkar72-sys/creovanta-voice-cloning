@@ -8,14 +8,14 @@ Creovanta is a web platform for creating speech from text using a user's own voi
 
 The Next.js frontend supports Supabase email authentication, private voice-sample upload, consent recording, and a user-scoped Voice Library. The Render FastAPI service is live and includes a server-to-server GPU worker client and sanitized worker health reporting.
 
-**Cartesia text-to-speech backend integration is staged.** `POST /api/v1/tts` uses the server-side Cartesia key and voice ID, validates the Supabase session, restricts use to the configured owner account, and checks profile ownership plus accepted consent before generating Bengali MP3 audio. The browser must never receive the Cartesia API key.
+**Cartesia per-profile voice cloning and Bengali TTS are implemented in the multi-user feature branch.** Each voice profile is cloned privately through the server-side Cartesia API and stores its own provider voice ID. The API verifies the Supabase session, profile ownership, and accepted consent before cloning or generating speech. A server-side Supabase service-role key is required only for protected profile status/voice-ID updates; it must never be exposed to the browser. Production rollout still requires configuring that key on Render, confirming the Cartesia API key has voice-cloning permission, and running a real second-account test.
 
 ## Architecture
 
 - **Web:** Next.js frontend, deployed on Vercel
 - **API:** Python FastAPI, deployed on Render
 - **Auth / database / storage:** Supabase
-- **Speech engine:** Cartesia hosted TTS API; Modal GPU worker remains available as a separate, currently inactive experiment
+- **Speech engine:** Cartesia hosted voice cloning and TTS API, with a private provider voice ID stored per Creovanta profile; Modal GPU worker remains a separate, currently inactive experiment
 
 ## Safety
 
@@ -41,12 +41,11 @@ See [gpu-worker/README.md](gpu-worker/README.md) for the four required GitHub Ac
 
 ## Current limitations
 
-- Backend Supabase JWT verification, voice ownership/consent enforcement, generation-job persistence, and quotas are not wired yet.
-- Render's worker URL and API token are not configured yet.
-- Modal GPU worker deployment and actual model inference are not tested.
-- The Bangla Chatterbox candidate requires commercial-rights and training-data provenance review before production.
-- A successful API deployment does not mean voice cloning is operational.
-
+- The multi-user voice-cloning feature requires a Render environment variable named `SUPABASE_SERVICE_ROLE_KEY`. Store the Supabase service-role key only on Render; never place it in frontend environment variables or Git.
+- The Cartesia API key must have permission to create private voice clones. Provider plan limits and clone charges may apply.
+- Real second-account isolation and live clone/TTS tests must be completed before public launch.
+- Audio history remains local to the browser/device; cloud audio history is a separate planned feature.
+- Modal GPU worker deployment and actual model inference remain inactive.
 
 ## Cartesia TTS configuration
 

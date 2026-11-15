@@ -78,7 +78,7 @@ type VoiceProfile = {
 
 const BUCKET = "voice-samples";
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
-const ACCEPTED_TYPES = ["audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp4", "audio/webm", "audio/flac"];
+const ACCEPTED_TYPES = ["audio/wav", "audio/x-wav", "audio/mpeg", "audio/webm", "audio/flac", "audio/ogg"];
 
 export default function Home() {
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
@@ -128,10 +128,11 @@ export default function Home() {
   }, [supabase, user?.id]);
 
   async function loadProfiles() {
-    if (!supabase) return;
+    if (!supabase || !user) return;
     const { data, error } = await supabase
       .from("voice_profiles")
       .select("id,name,description,language_code,status,consent_type,created_at")
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false });
     if (error) setMessage("Could not load your voice library: " + error.message);
     else {
@@ -238,6 +239,38 @@ export default function Home() {
     }
   }
 
+  async function requestVoiceClone(profileId: string) {
+    if (!supabase) throw new Error("Supabase is not configured.");
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (sessionError || !accessToken) throw new Error("সেশন শেষ হয়েছে। আবার sign in করো।");
+    const response = await fetch("https://creovanta-api.onrender.com/api/v1/voices/clone", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + accessToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ voice_profile_id: profileId }),
+    });
+    if (!response.ok) {
+      let detail = "Voice cloning failed (HTTP " + response.status + ")";
+      try { const body = await response.json(); detail = body.detail || detail; } catch {}
+      throw new Error(detail);
+    }
+  }
+
+  async function retryVoiceClone(profileId: string) {
+    setBusy(true);
+    setMessage("তোমার Voice Profile তৈরি হচ্ছে…");
+    try {
+      await requestVoiceClone(profileId);
+      await loadProfiles();
+      setMessage("Voice Profile প্রস্তুত। এখন বাংলা Text-to-Speech ব্যবহার করতে পারো।");
+    } catch (error) {
+      await loadProfiles();
+      setMessage(error instanceof Error ? error.message : "Voice cloning সম্পন্ন হয়নি। পরে আবার চেষ্টা করো।");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function uploadVoice() {
     if (!supabase || !user) return;
     if (!voiceName.trim()) { setMessage("Give this voice profile a name."); return; }
@@ -245,7 +278,7 @@ export default function Home() {
     if (!consentAccepted) { setMessage("You must confirm voice ownership or explicit permission."); return; }
     if (audioFile.size > MAX_FILE_BYTES) { setMessage("The audio file must be 50 MB or smaller."); return; }
     if (!ACCEPTED_TYPES.includes(audioFile.type)) {
-      setMessage("Use a WAV, MP3, M4A, WebM, or FLAC audio file.");
+      setMessage("Use a WAV, MP3, WebM, FLAC, or OGG audio file.");
       return;
     }
 
@@ -270,7 +303,7 @@ export default function Home() {
       language_code: "bn",
       source_audio_path: objectPath,
       consent_type: consentType,
-      status: "ready",
+      status: "processing",
     }).select("id").single();
 
     if (profile.error || !profile.data) {
@@ -293,6 +326,15 @@ export default function Home() {
       await supabase.storage.from(BUCKET).remove([objectPath]);
       setBusy(false);
       setMessage("The consent record could not be saved, so the upload was rolled back: " + consent.error.message);
+      return;
+    }
+
+    try {
+      await requestVoiceClone(profile.data.id);
+    } catch (error) {
+      await loadProfiles();
+      setBusy(false);
+      setMessage("নমুনা ও সম্মতি সংরক্ষিত হয়েছে, কিন্তু ভয়েস ক্লোন তৈরি হয়নি। Voice Library থেকে আবার চেষ্টা করো। " + (error instanceof Error ? error.message : ""));
       return;
     }
 
@@ -365,8 +407,8 @@ export default function Home() {
             <div><label>Voice ownership</label><select className="field" value={consentType} onChange={e=>setConsentType(e.target.value as "self"|"authorized")}><option value="self">This is my own voice</option><option value="authorized">I have explicit permission</option></select></div>
           </div>
           <label>Short description (optional)</label><input className="field" value={voiceDescription} onChange={e=>setVoiceDescription(e.target.value)} placeholder="Voice style or notes"/>
-          <label htmlFor="voice-audio">Audio sample (WAV, MP3, M4A, WebM, FLAC · max 50 MB)</label>
-          <input id="voice-audio" className="field" type="file" accept=".wav,.mp3,.m4a,.webm,.flac,audio/*" onChange={e=>setAudioFile(e.target.files?.[0] ?? null)}/>
+          <label htmlFor="voice-audio">Audio sample (WAV, MP3, WebM, FLAC, OGG · max 50 MB)</label>
+          <input id="voice-audio" className="field" type="file" accept=".wav,.mp3,.webm,.flac,.ogg,.oga,audio/wav,audio/mpeg,audio/webm,audio/flac,audio/ogg" onChange={e=>setAudioFile(e.target.files?.[0] ?? null)}/>
           <label style={{display:"flex",alignItems:"flex-start",gap:10,margin:"10px 0 18px",lineHeight:1.5}}>
             <input type="checkbox" checked={consentAccepted} onChange={e=>setConsentAccepted(e.target.checked)} style={{marginTop:3}}/>
             I confirm this is my voice or I have explicit permission from the voice owner to upload and use it for AI voice generation.
@@ -410,7 +452,10 @@ export default function Home() {
             {profiles.length===0 ? <p className="small">No voice profiles saved yet.</p> : <div style={{display:"grid",gap:10}}>
               {profiles.map(profile=><div key={profile.id} className="feature" style={{padding:16,display:"flex",justifyContent:"space-between",gap:12,alignItems:"center"}}>
                 <div><b>{profile.name}</b><div className="small">{profile.description || "Bengali voice sample"} · {new Date(profile.created_at).toLocaleDateString()}</div></div>
-                <span className="small">{profile.status==="processing"?"Sample saved":profile.status}</span>
+                <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                  <span className="small">{profile.status==="ready"?"প্রস্তুত":profile.status==="processing"?"প্রসেসিং":profile.status==="failed"?"ব্যর্থ":"অপেক্ষমাণ"}</span>
+                  {profile.status!=="ready" && <button className="btn secondary" disabled={busy} onClick={()=>retryVoiceClone(profile.id)}>আবার চেষ্টা</button>}
+                </div>
               </div>)}
             </div>}
           </div>
