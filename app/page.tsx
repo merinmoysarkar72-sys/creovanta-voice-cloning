@@ -183,10 +183,10 @@ export default function Home() {
     return () => { cancelled = true; };
   }, [user?.id]);
 
-  useEffect(() => () => { audioHistory.forEach(item => URL.revokeObjectURL(item.url)); }, [audioHistory]);
-
   async function deleteHistoryItem(id: string) {
     try {
+      const item = audioHistory.find(entry => entry.id === id);
+      if (item) URL.revokeObjectURL(item.url);
       await removeAudioRecord(id);
       setAudioHistory(current => current.filter(item => item.id !== id));
       setHistoryMessage("অডিও হিস্ট্রি থেকে মুছে ফেলা হয়েছে।");
@@ -222,6 +222,14 @@ export default function Home() {
       const nextUrl = URL.createObjectURL(new Blob([blob], { type: contentType }));
       setAudioExtension(extension);
       setAudioUrl(nextUrl);
+      const record: AudioHistoryItem = { id: crypto.randomUUID(), userId: user.id, text: transcript, createdAt: new Date().toISOString(), contentType, blob };
+      try {
+        await saveAudioRecord(record);
+        setAudioHistory(current => [{ id: record.id, text: transcript, createdAt: record.createdAt, url: URL.createObjectURL(blob), extension }, ...current]);
+        setHistoryMessage("এই ডিভাইসে অডিওটি হিস্ট্রিতে সংরক্ষিত হয়েছে।");
+      } catch {
+        setHistoryMessage("অডিও তৈরি হয়েছে, তবে ডিভাইসের স্টোরেজে হিস্ট্রি সংরক্ষণ করা যায়নি।");
+      }
       setMessage("অডিও তৈরি হয়েছে। নিচে শুনতে ও ডাউনলোড করতে পারো।");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "অজানা সমস্যায় অডিও তৈরি হয়নি।");
@@ -379,6 +387,22 @@ export default function Home() {
               <b>তোমার তৈরি অডিও</b>
               <audio controls src={audioUrl} style={{width:"100%",marginTop:12}} />
               <a className="btn secondary" href={audioUrl} download={"creovanta-bengali-voice." + audioExtension} style={{display:"inline-block",marginTop:12}}>অডিও ডাউনলোড</a>
+            </div>}
+          </div>
+          <div style={{marginTop:28,borderTop:"1px solid #293044",paddingTop:22}}>
+            <h3 style={{fontSize:20,letterSpacing:"-.5px"}}>অডিও হিস্ট্রি</h3>
+            <p className="small" style={{marginBottom:14}}>তৈরি করা অডিও এই ডিভাইসের ব্রাউজারে সংরক্ষিত থাকবে। অন্য ডিভাইসে দেখা যাবে না।</p>
+            {historyMessage && <div className="small" role="status" style={{marginBottom:12}}>{historyMessage}</div>}
+            {audioHistory.length===0 ? <p className="small">এখনো কোনো অডিও সংরক্ষিত হয়নি।</p> : <div style={{display:"grid",gap:12}}>
+              {audioHistory.map(item=><div key={item.id} className="feature" style={{padding:16}}>
+                <div className="small">{new Date(item.createdAt).toLocaleString()}</div>
+                <p style={{lineHeight:1.6,margin:"8px 0",whiteSpace:"pre-wrap"}}>{item.text}</p>
+                <audio controls src={item.url} style={{width:"100%"}} />
+                <div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:10}}>
+                  <a className="btn secondary" href={item.url} download={"creovanta-audio."+item.extension}>ডাউনলোড</a>
+                  <button className="btn secondary" onClick={()=>deleteHistoryItem(item.id)}>মুছে ফেলুন</button>
+                </div>
+              </div>)}
             </div>}
           </div>
           <div style={{marginTop:28,borderTop:"1px solid #293044",paddingTop:22}}>
