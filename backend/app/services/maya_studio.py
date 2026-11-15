@@ -172,7 +172,7 @@ def _call_maya_clone(
     """Blocking Gradio client call; run in a worker thread from async routes."""
     from gradio_client import Client, handle_file
 
-    client = Client(HF_SPACE_ID, token=hf_token, verbose=False, httpx_kwargs={"timeout": 240})
+    client = Client(HF_SPACE_ID, token=hf_token, verbose=False, analytics_enabled=False, httpx_kwargs={"timeout": 240})
     try:
         result = client.predict(
             text,
