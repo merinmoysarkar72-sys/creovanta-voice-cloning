@@ -158,7 +158,7 @@ export default function Home() {
     else {
       const nextProfiles = (data ?? []) as VoiceProfile[];
       setProfiles(nextProfiles);
-      setSelectedProfileId((current) => preferredProfileId || current || nextProfiles[0]?.id || "");
+      setSelectedProfileId((current) => preferredProfileId || (nextProfiles.some(profile => profile.id === current) ? current : nextProfiles[0]?.id || ""));
     }
   }
 
