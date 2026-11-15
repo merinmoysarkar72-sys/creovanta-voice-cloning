@@ -30,7 +30,7 @@ The migration retains the existing provider/status guard and prevents ordinary a
 
 ## Free quota and limits
 
-- Hugging Face Free ZeroGPU quota is limited (currently documented as 5 GPU minutes/day).
+- Hugging Face Free ZeroGPU quota is limited (currently documented as 5 GPU minutes/day); it resets 24 hours after the first GPU use.
 - Each clone test and each speech generation uses the connected user's quota.
 - Maya Studio caps speech text at 1,200 characters per request to stay within the Space's bounded request duration.
 - No Modal GPU, paid hardware, shared Hugging Face token, or payment method is used by this integration.
