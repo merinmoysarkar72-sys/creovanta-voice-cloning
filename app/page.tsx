@@ -462,7 +462,7 @@ export default function Home() {
           <div className="status">Your account is connected. Add a voice sample below. Uploads are private and restricted to your account.</div>
           <div className="feature" style={{padding:16,marginBottom:18}}>
             <b>Free Maya engine · Hugging Face ZeroGPU</b>
-            <p className="small" style={{margin:"8px 0 12px"}}>{hfAccessToken ? "Connected as " + hfUsername + ". Your own free daily GPU quota is used; your token stays in this browser session and Creovanta does not store it." : "Connect your Hugging Face account to use your own free daily GPU quota (5 minutes/day on a free account). No payment card is required."}</p>
+            <p className="small" style={{margin:"8px 0 12px"}}>{hfAccessToken ? "Connected as " + hfUsername + ". Your own free daily GPU quota is used; the token stays only in this open page and is cleared on refresh. Creovanta does not store it." : "Connect your Hugging Face account to use your own free daily GPU quota (5 minutes/day on a free account). No payment card is required."}</p>
             {hfAccessToken ? <button className="btn secondary" onClick={disconnectHuggingFace}>Disconnect Hugging Face</button> : <button className="btn" onClick={connectHuggingFace}>Connect Hugging Face</button>}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14}}>
@@ -474,7 +474,7 @@ export default function Home() {
           <input id="voice-audio" className="field" type="file" accept=".wav,.mp3,.webm,.flac,.ogg,.oga,audio/wav,audio/mpeg,audio/webm,audio/flac,audio/ogg" onChange={e=>setAudioFile(e.target.files?.[0] ?? null)}/>
           <label>Reference transcript (exact words spoken in the recording)</label>
           <textarea className="field" rows={3} maxLength={2000} value={referenceText} onChange={e=>setReferenceText(e.target.value)} placeholder="রেকর্ডিংয়ে যে কথাগুলো বলা হয়েছে, ঠিক সেভাবেই লিখুন…" style={{resize:"vertical",lineHeight:1.7}} />
-          <p className="small" style={{marginTop:-6,marginBottom:12}}>পরিষ্কার একক কণ্ঠের ৩–১০ সেকেন্ডের নমুনা ব্যবহার করুন। Transcript ভুল হলে কণ্ঠের মিল কমতে পারে।</p>
+          <p className="small" style={{marginTop:-6,marginBottom:12}}>বাংলায় পরিষ্কার একক কণ্ঠের ৩–১০ সেকেন্ডের নমুনা ব্যবহার করুন। Transcript ভুল হলে কণ্ঠের মিল কমতে পারে।</p>
           <p className="small" style={{margin:"12px 0 8px"}}>গুরুত্বপূর্ণ: Maya দিয়ে voice clone ও audio generation করার সময় নমুনা অডিও এবং transcript Hugging Face-এর Maya Space-এ পাঠানো হবে। Space operator সেটি process করবে।</p>
           <label style={{display:"flex",alignItems:"flex-start",gap:10,margin:"10px 0 18px",lineHeight:1.5}}>
             <input type="checkbox" checked={consentAccepted} onChange={e=>setConsentAccepted(e.target.checked)} style={{marginTop:3}}/>
