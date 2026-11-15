@@ -475,10 +475,10 @@ export default function Home() {
           <label>Reference transcript (exact words spoken in the recording)</label>
           <textarea className="field" rows={3} maxLength={2000} value={referenceText} onChange={e=>setReferenceText(e.target.value)} placeholder="রেকর্ডিংয়ে যে কথাগুলো বলা হয়েছে, ঠিক সেভাবেই লিখুন…" style={{resize:"vertical",lineHeight:1.7}} />
           <p className="small" style={{marginTop:-6,marginBottom:12}}>বাংলায় পরিষ্কার একক কণ্ঠের ৩–১০ সেকেন্ডের নমুনা ব্যবহার করুন। Transcript ভুল হলে কণ্ঠের মিল কমতে পারে।</p>
-          <p className="small" style={{margin:"12px 0 8px"}}>গুরুত্বপূর্ণ: Maya দিয়ে voice clone ও audio generation করার সময় নমুনা অডিও এবং transcript Hugging Face-এর Maya Space-এ পাঠানো হবে। Space operator সেটি process করবে।</p>
+          <p className="small" style={{margin:"12px 0 8px"}}>গুরুত্বপূর্ণ: Maya দিয়ে voice clone ও audio generation করার সময় নমুনা অডিও এবং transcript Hugging Face-এর Maya Space-এ পাঠানো হবে। Space operator সেটি process করতে পারে এবং runtime-এ সাময়িকভাবে রাখতে পারে; retention Creovanta নিয়ন্ত্রণ করে না।</p>
           <label style={{display:"flex",alignItems:"flex-start",gap:10,margin:"10px 0 18px",lineHeight:1.5}}>
             <input type="checkbox" checked={consentAccepted} onChange={e=>setConsentAccepted(e.target.checked)} style={{marginTop:3}}/>
-            I confirm this is my voice, or I have explicit permission from the voice owner to upload it and let the external Hugging Face Maya Space process the sample and transcript for AI speech generation.
+            I confirm this is my voice, or I have explicit permission from the voice owner to upload it and let the external Hugging Face Maya Space process and temporarily handle the sample and transcript for AI speech generation.
           </label>
           <button className="btn" style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9}} onClick={uploadVoice} disabled={busy}><UploadCloud size={17}/>{busy?"Please wait…":"Save private voice sample"}</button>
           <div style={{marginTop:28,borderTop:"1px solid #293044",paddingTop:22}}>
