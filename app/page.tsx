@@ -368,9 +368,11 @@ export default function Home() {
           <p className="lead">Create expressive, natural-sounding speech with a voice that belongs to you. Record once, build your voice library, and bring your words to life.</p>
           <div style={{display:"flex",gap:12,marginTop:28,flexWrap:"wrap"}}>
             <a className="btn" href="#account" style={{display:"inline-flex",alignItems:"center",gap:9}}>Create your account <ArrowRight size={17}/></a>
+            <a className="btn secondary" href="https://huggingface.co/spaces/maya-research/maya2-native-studio" target="_blank" rel="noopener noreferrer">Try free Maya Studio <ArrowRight size={17}/></a>
             <a className="btn secondary" href="#features">Explore features</a>
           </div>
           <p className="small" style={{marginTop:18}}>Voice cloning is restricted to your own voice or voices you have explicit permission to use.</p>
+          <p className="small" style={{marginTop:8}}>Free Maya Studio uses Hugging Face ZeroGPU (5 minutes per day on a free account). You will sign in to Hugging Face there; audio uploaded to that external demo is processed by its operator, not stored in your private Creovanta Voice Library.</p>
         </div>
         <div className="heroCard">
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span className="small">VOICE STUDIO</span><span className="small" style={{color:"#7bd9c6"}}>● PRIVATE WORKSPACE</span></div>
