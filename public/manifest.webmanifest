@@ -1,0 +1,24 @@
+{
+  "id": "/",
+  "name": "Creovanta Voice Cloning",
+  "short_name": "Creovanta",
+  "description": "Create Bengali AI speech with a voice you own or have permission to use.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#090b12",
+  "theme_color": "#090b12",
+  "categories": [
+    "productivity",
+    "music"
+  ],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
