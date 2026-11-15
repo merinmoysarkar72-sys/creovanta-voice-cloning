@@ -209,6 +209,44 @@ export default function Home() {
     setMessage("You have signed out.");
   }
 
+  async function deleteAccount() {
+    if (!supabase || !user) return;
+    const confirmed = window.confirm("Delete your Creovanta account, voice profiles, and uploaded voice samples permanently? This cannot be undone.");
+    if (!confirmed) return;
+    setBusy(true);
+    setMessage("Deleting your account and private voice data…");
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (sessionError || !accessToken) throw new Error("Your session has expired. Sign in again and retry.");
+      const response = await fetch("https://creovanta-api.onrender.com/api/v1/account", {
+        method: "DELETE",
+        headers: { "Authorization": "Bearer " + accessToken },
+      });
+      if (!response.ok) {
+        let detail = "Account deletion failed (HTTP " + response.status + ").";
+        try { const body = await response.json(); detail = body.detail || detail; } catch {}
+        throw new Error(detail);
+      }
+      const records = await getAudioRecords(user.id).catch(() => []);
+      for (const record of records) await removeAudioRecord(record.id).catch(() => undefined);
+      audioHistory.forEach(item => URL.revokeObjectURL(item.url));
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+      await supabase.auth.signOut();
+      setUser(null);
+      setProfiles([]);
+      setAudioHistory([]);
+      setAudioUrl("");
+      setHfAccessToken("");
+      setHfUsername("");
+      setMessage("তোমার Creovanta account এবং ব্যক্তিগত voice sample মুছে ফেলা হয়েছে।");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Account deletion could not be completed. Please retry.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   useEffect(() => {
     return () => { if (audioUrl) URL.revokeObjectURL(audioUrl); };
   }, [audioUrl]);
@@ -526,10 +564,19 @@ export default function Home() {
               </div>)}
             </div>}
           </div>
+          <div className="feature" style={{marginTop:24,padding:18}}>
+            <h3 style={{fontSize:18,letterSpacing:"-.5px"}}>Account & Privacy</h3>
+            <p>তুমি চাইলে তোমার Creovanta account, voice profiles এবং private uploaded samples স্থায়ীভাবে মুছে ফেলতে পারো।</p>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+              <a className="btn secondary" href="/privacy">Privacy Policy</a>
+              <a className="btn secondary" href="/delete-account">Delete account help</a>
+              <button className="btn secondary" onClick={deleteAccount} disabled={busy}>Delete my account</button>
+            </div>
+          </div>
         </>}
         {message && <div className="status" role="status">{message}</div>}
       </section>
-      <footer className="footer" style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}><span>© {new Date().getFullYear()} Creovanta</span><span>Creovanta Voice Cloning · Your voice, your creation.</span></footer>
+      <footer className="footer" style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}><span>© {new Date().getFullYear()} Creovanta</span><span style={{display:"flex",gap:14,flexWrap:"wrap"}}><a href="/privacy">Privacy Policy</a><a href="/delete-account">Delete account</a><span>Creovanta Voice Cloning · Your voice, your creation.</span></span></footer>
     </div>
   </main>;
 }
