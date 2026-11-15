@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.services.account import router as account_router
-from app.services.maya_studio import router as maya_router
+from app.services.speech_service import router as speech_router
 from app.services.worker_client import worker_health
 
 
@@ -35,7 +35,7 @@ app = FastAPI(
 )
 
 app.include_router(account_router)
-app.include_router(maya_router)
+app.include_router(speech_router)
 
 app.add_middleware(
     CORSMiddleware,
