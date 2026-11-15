@@ -255,9 +255,10 @@ async def _set_profile_status(
     user_id: str,
     status: str,
 ) -> None:
+    # Supabase secret API keys are opaque API keys, not JWTs.
+    # Send the privileged key only in apikey; never as Authorization: Bearer.
     headers = {
         "apikey": service_key,
-        "Authorization": f"Bearer {service_key}",
         "Content-Type": "application/json",
         "Prefer": "return=minimal",
     }
