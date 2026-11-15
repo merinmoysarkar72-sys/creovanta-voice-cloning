@@ -18,8 +18,8 @@ export default function PrivacyPolicy() {
         <li><b>Account information:</b> email address and authentication data needed to create and secure your account. Password authentication is managed by Supabase; Creovanta does not receive your plaintext password.</li>
         <li><b>Voice profile information:</b> profile name, optional description, language, voice ownership selection, consent record, and the exact transcript you provide for the reference recording.</li>
         <li><b>Voice recordings:</b> audio samples you upload for voice cloning. They are stored in a private Supabase Storage bucket associated with your account.</li>
-        <li><b>Text and generated audio:</b> the text you submit is sent to the selected speech provider for generation. Generated audio history is stored locally in your browser/device unless a future feature clearly says otherwise; it is not currently a cloud audio-history service.</li>
-        <li><b>Hugging Face connection:</b> if you connect Hugging Face, the inference authorization token is held in the current browser page memory and is not intentionally saved by Creovanta. Refreshing or closing the page clears it.</li>
+        <li><b>Text and generated audio:</b> the text you submit is sent to Creovanta speech processing for generation. Generated audio history is stored locally in your browser/device unless a future feature clearly says otherwise; it is not currently a cloud audio-history service.</li>
+        <li><b>generation account connection:</b> if you connect your generation account, the authorization token is held in the current browser page memory and is not intentionally saved by Creovanta. Refreshing or closing the page clears it.</li>
         <li><b>Technical information:</b> hosting and security services may process IP address, request metadata, device/browser details, and operational logs to deliver and protect the service.</li>
       </ul>
 
@@ -31,8 +31,7 @@ export default function PrivacyPolicy() {
         <li><b>Supabase</b> provides account authentication, database services, and private voice-sample storage.</li>
         <li><b>Vercel</b> hosts the Creovanta web application.</li>
         <li><b>Render</b> hosts the Creovanta API backend.</li>
-        <li><b>Hugging Face / Maya 2 Native:</b> when you choose a Maya voice profile, your reference recording, its transcript, and generation text are sent to the external Maya Space for processing. Hugging Face and the Space operator control their own infrastructure and retention practices.</li>
-        <li><b>Cartesia:</b> if a Cartesia-powered profile is used, the relevant voice sample and speech text are sent to Cartesia for cloning or generation.</li>
+        <li><b>External speech processing:</b> when you generate speech, your reference recording, its transcript, and generation text are sent securely to the Hugging Face-hosted processing service used by Creovanta. Hugging Face and the service operator control their own infrastructure and retention practices.</li>
       </ul>
       <p>We do not sell personal information. External providers process data under their own terms and privacy policies. Do not upload another person's voice unless you have explicit permission.</p>
 
@@ -47,7 +46,7 @@ export default function PrivacyPolicy() {
       <p>Creovanta is not designed for children. Do not create an account or upload a child's voice recording without the legally required parent or guardian authority and permission.</p>
 
       <h2>7. Your choices</h2>
-      <p>You may disconnect Hugging Face, delete locally stored audio history, stop using the service, or delete your Creovanta account. You must only upload voices you own or are authorized to use.</p>
+      <p>You may disconnect your generation account, delete locally stored audio history, stop using the service, or delete your Creovanta account. You must only upload voices you own or are authorized to use.</p>
 
       <h2>8. Contact</h2>
       <p>For privacy questions, use the developer contact email published on the Creovanta Google Play Store listing. A monitored privacy contact email must be added to the public listing before production publication.</p>
