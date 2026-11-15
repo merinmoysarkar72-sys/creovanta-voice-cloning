@@ -147,7 +147,7 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase, user?.id]);
 
-  async function loadProfiles() {
+  async function loadProfiles(preferredProfileId?: string) {
     if (!supabase || !user) return;
     const { data, error } = await supabase
       .from("voice_profiles")
@@ -158,7 +158,7 @@ export default function Home() {
     else {
       const nextProfiles = (data ?? []) as VoiceProfile[];
       setProfiles(nextProfiles);
-      setSelectedProfileId((current) => current || nextProfiles[0]?.id || "");
+      setSelectedProfileId((current) => preferredProfileId || current || nextProfiles[0]?.id || "");
     }
   }
 
