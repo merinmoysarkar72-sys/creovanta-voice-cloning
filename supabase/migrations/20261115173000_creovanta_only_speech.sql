@@ -1,4 +1,8 @@
 -- Retire the previous speech vendor and make Creovanta's current speech workflow the only provider.
+-- Remove the legacy trigger first so old provider profiles can be marked unusable safely.
+drop trigger if exists guard_voice_profile_provider_fields on public.voice_profiles;
+drop function if exists public.guard_voice_profile_provider_fields();
+
 -- Old vendor profiles cannot be migrated as usable clones: require a fresh reference sample/transcript.
 update public.voice_profiles
 set provider = 'maya',
@@ -14,9 +18,6 @@ alter table public.voice_profiles
 alter table public.voice_profiles
   add constraint voice_profiles_provider_check
   check (provider = 'maya');
-
-drop trigger if exists guard_voice_profile_provider_fields on public.voice_profiles;
-drop function if exists public.guard_voice_profile_provider_fields();
 
 drop index if exists public.voice_profiles_provider_voice_id_uidx;
 alter table public.voice_profiles
