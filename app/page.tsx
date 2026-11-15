@@ -4,6 +4,68 @@ import { useEffect, useState } from "react";
 import { ArrowRight, AudioLines, ShieldCheck, Sparkles, WandSparkles, Mic2, UploadCloud, LogOut } from "lucide-react";
 import { createClient, SupabaseClient, User } from "@supabase/supabase-js";
 
+
+type AudioHistoryItem = {
+  id: string;
+  userId: string;
+  text: string;
+  createdAt: string;
+  contentType: string;
+  blob: Blob;
+};
+
+const AUDIO_DB = "creovanta-audio-history";
+const AUDIO_STORE = "generated-audio";
+
+function openAudioDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(AUDIO_DB, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(AUDIO_STORE)) {
+        const store = db.createObjectStore(AUDIO_STORE, { keyPath: "id" });
+        store.createIndex("userId", "userId", { unique: false });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveAudioRecord(record: AudioHistoryItem) {
+  const db = await openAudioDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(AUDIO_STORE, "readwrite");
+    tx.objectStore(AUDIO_STORE).put(record);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
+
+async function getAudioRecords(userId: string): Promise<AudioHistoryItem[]> {
+  const db = await openAudioDb();
+  const records = await new Promise<AudioHistoryItem[]>((resolve, reject) => {
+    const tx = db.transaction(AUDIO_STORE, "readonly");
+    const request = tx.objectStore(AUDIO_STORE).index("userId").getAll(userId);
+    request.onsuccess = () => resolve(request.result as AudioHistoryItem[]);
+    request.onerror = () => reject(request.error);
+  });
+  db.close();
+  return records.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+async function removeAudioRecord(id: string) {
+  const db = await openAudioDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(AUDIO_STORE, "readwrite");
+    tx.objectStore(AUDIO_STORE).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
+
 type VoiceProfile = {
   id: string;
   name: string;
@@ -37,6 +99,8 @@ export default function Home() {
   const [generating, setGenerating] = useState(false);
   const [audioUrl, setAudioUrl] = useState("");
   const [audioExtension, setAudioExtension] = useState("wav");
+  const [audioHistory, setAudioHistory] = useState<Array<{id:string;text:string;createdAt:string;url:string;extension:string}>>([]);
+  const [historyMessage, setHistoryMessage] = useState("");
 
   useEffect(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -108,6 +172,26 @@ export default function Home() {
   useEffect(() => {
     return () => { if (audioUrl) URL.revokeObjectURL(audioUrl); };
   }, [audioUrl]);
+
+  useEffect(() => {
+    if (!user) { setAudioHistory([]); return; }
+    let cancelled = false;
+    getAudioRecords(user.id).then(records => {
+      if (cancelled) return;
+      setAudioHistory(records.map(record => ({ id: record.id, text: record.text, createdAt: record.createdAt, url: URL.createObjectURL(record.blob), extension: record.contentType.includes("mpeg") ? "mp3" : "wav" })));
+    }).catch(() => setHistoryMessage("এই ডিভাইসে অডিও হিস্ট্রি লোড করা যায়নি।"));
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  useEffect(() => () => { audioHistory.forEach(item => URL.revokeObjectURL(item.url)); }, [audioHistory]);
+
+  async function deleteHistoryItem(id: string) {
+    try {
+      await removeAudioRecord(id);
+      setAudioHistory(current => current.filter(item => item.id !== id));
+      setHistoryMessage("অডিও হিস্ট্রি থেকে মুছে ফেলা হয়েছে।");
+    } catch { setHistoryMessage("অডিও মুছতে সমস্যা হয়েছে।"); }
+  }
 
   async function generateSpeech() {
     if (!supabase || !user) return;
