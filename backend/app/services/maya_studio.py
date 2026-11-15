@@ -305,7 +305,7 @@ async def clone_voice(
             )
             return {"status": "ready", "message": "Your Maya voice profile passed the cloning test"}
     except HTTPException as exc:
-        if exc.status_code not in (401, 403, 404, 422):
+        if exc.status_code not in (401, 403, 404, 409, 422):
             try:
                 async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as status_client:
                     user_id = await _authenticated_user(status_client, supabase_url, user_headers)
