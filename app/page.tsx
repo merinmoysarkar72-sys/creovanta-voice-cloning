@@ -78,7 +78,7 @@ type VoiceProfile = {
 
 const BUCKET = "voice-samples";
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
-const ACCEPTED_TYPES = ["audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp4", "audio/webm", "audio/flac"];
+const ACCEPTED_TYPES = ["audio/wav", "audio/x-wav", "audio/mpeg", "audio/webm", "audio/flac", "audio/ogg"];
 
 export default function Home() {
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
@@ -278,7 +278,7 @@ export default function Home() {
     if (!consentAccepted) { setMessage("You must confirm voice ownership or explicit permission."); return; }
     if (audioFile.size > MAX_FILE_BYTES) { setMessage("The audio file must be 50 MB or smaller."); return; }
     if (!ACCEPTED_TYPES.includes(audioFile.type)) {
-      setMessage("Use a WAV, MP3, M4A, WebM, or FLAC audio file.");
+      setMessage("Use a WAV, MP3, WebM, FLAC, or OGG audio file.");
       return;
     }
 
@@ -407,8 +407,8 @@ export default function Home() {
             <div><label>Voice ownership</label><select className="field" value={consentType} onChange={e=>setConsentType(e.target.value as "self"|"authorized")}><option value="self">This is my own voice</option><option value="authorized">I have explicit permission</option></select></div>
           </div>
           <label>Short description (optional)</label><input className="field" value={voiceDescription} onChange={e=>setVoiceDescription(e.target.value)} placeholder="Voice style or notes"/>
-          <label htmlFor="voice-audio">Audio sample (WAV, MP3, M4A, WebM, FLAC · max 50 MB)</label>
-          <input id="voice-audio" className="field" type="file" accept=".wav,.mp3,.m4a,.webm,.flac,audio/*" onChange={e=>setAudioFile(e.target.files?.[0] ?? null)}/>
+          <label htmlFor="voice-audio">Audio sample (WAV, MP3, WebM, FLAC, OGG · max 50 MB)</label>
+          <input id="voice-audio" className="field" type="file" accept=".wav,.mp3,.webm,.flac,.ogg,.oga,audio/wav,audio/mpeg,audio/webm,audio/flac,audio/ogg" onChange={e=>setAudioFile(e.target.files?.[0] ?? null)}/>
           <label style={{display:"flex",alignItems:"flex-start",gap:10,margin:"10px 0 18px",lineHeight:1.5}}>
             <input type="checkbox" checked={consentAccepted} onChange={e=>setConsentAccepted(e.target.checked)} style={{marginTop:3}}/>
             I confirm this is my voice or I have explicit permission from the voice owner to upload and use it for AI voice generation.
