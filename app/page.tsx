@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, AudioLines, ShieldCheck, Sparkles, WandSparkles, Mic2, UploadCloud, LogOut, X } from "lucide-react";
 import { createClient, SupabaseClient, User } from "@supabase/supabase-js";
-import { oauthHandleRedirectIfPresent, oauthLoginUrl } from "@huggingface/hub";
 import { Client, handle_file } from "@gradio/client";
 
 
@@ -99,6 +98,7 @@ export default function Home() {
   const [referenceTranscript, setReferenceTranscript] = useState("");
   const [hfAccessToken, setHfAccessToken] = useState("");
   const [hfUsername, setHfUsername] = useState("");
+  const [hfTokenInput, setHfTokenInput] = useState("");
   const [consentType, setConsentType] = useState<"self" | "authorized">("self");
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -110,20 +110,6 @@ export default function Home() {
   const [clonePreviewUrl, setClonePreviewUrl] = useState("");
   const [audioHistory, setAudioHistory] = useState<Array<{id:string;text:string;createdAt:string;url:string;extension:string}>>([]);
   const [historyMessage, setHistoryMessage] = useState("");
-
-  useEffect(() => {
-    let active = true;
-    oauthHandleRedirectIfPresent().then((result) => {
-      if (!active || !result) return;
-      const oauth = result as unknown as { accessToken: string; userInfo?: { preferred_username?: string; name?: string } };
-      setHfAccessToken(oauth.accessToken);
-      setHfUsername(oauth.userInfo?.preferred_username || oauth.userInfo?.name || "Connected");
-      window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
-    }).catch(() => {
-      if (active) setMessage("Generation account connection did not finish. Please try again.");
-    });
-    return () => { active = false; };
-  }, []);
 
   useEffect(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -167,13 +153,34 @@ export default function Home() {
   }
 
   async function connectGenerationAccount() {
+    const candidate = hfTokenInput.trim();
+    if (!candidate.startsWith("hf_") || candidate.startsWith("hf_oauth_")) {
+      setMessage("এখানে Hugging Face-এর Personal Access Token (hf_...) দিন। OAuth token এখানে কাজ করবে না।");
+      return;
+    }
+    setBusy(true);
+    setMessage("Hugging Face Read token যাচাই হচ্ছে…");
     try {
-      const clientId = "https://creovanta-omega.vercel.app/.well-known/oauth-cimd";
-      const redirectUrl = "https://creovanta-omega.vercel.app/";
-      const url = await oauthLoginUrl({ clientId, redirectUrl, scopes: "openid profile inference-api" });
-      window.location.assign(url);
-    } catch {
-      setMessage("Could not start the account connection. Please try again.");
+      const response = await fetch("https://huggingface.co/api/whoami-v2", {
+        method: "GET",
+        headers: { Authorization: "Bearer " + candidate },
+        cache: "no-store",
+      });
+      if (response.status === 401 || response.status === 403) {
+        throw new Error("Token সঠিক নয় বা Read permission নেই। Hugging Face থেকে নতুন Read token তৈরি করে দিন।");
+      }
+      if (!response.ok) {
+        throw new Error("Hugging Face account যাচাই করা যায়নি (HTTP " + response.status + ")। পরে আবার চেষ্টা করুন।");
+      }
+      const account = await response.json() as { name?: string; fullname?: string };
+      setHfAccessToken(candidate);
+      setHfUsername(account.name || account.fullname || "Connected");
+      setHfTokenInput("");
+      setMessage("Hugging Face account সফলভাবে সংযুক্ত হয়েছে। এখন আগের Voice Profile দিয়েই Retry করা যাবে।");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Token যাচাই করা যায়নি।");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -353,7 +360,8 @@ export default function Home() {
   function disconnectGenerationAccount() {
     setHfAccessToken("");
     setHfUsername("");
-    setMessage("Generation account disconnected from this browser session.");
+    setHfTokenInput("");
+    setMessage("Hugging Face account এই browser session থেকে বিচ্ছিন্ন করা হয়েছে।");
   }
 
   async function authenticate() {
@@ -383,6 +391,7 @@ export default function Home() {
     setProfiles([]);
     setHfAccessToken("");
     setHfUsername("");
+    setHfTokenInput("");
     setMessage("You have signed out.");
   }
 
@@ -667,8 +676,13 @@ export default function Home() {
           <div className="status">Your account is connected. Add a voice sample below. Uploads are private and restricted to your account.</div>
           <div className="feature" style={{padding:16,marginBottom:18}}>
             <b>Creovanta Speech Studio</b>
-            <p className="small" style={{margin:"8px 0 12px"}}>{hfAccessToken ? "Connected as " + hfUsername + ". Your own free daily GPU quota is used; the token stays only in this open page and is cleared on refresh. Creovanta does not store it." : "Connect your generation account to enable your personal daily processing allowance. No payment card is required."}</p>
-            {hfAccessToken ? <button className="btn secondary" onClick={disconnectGenerationAccount}>Disconnect generation account</button> : <button className="btn" onClick={connectGenerationAccount}>Connect generation account</button>}
+            <p className="small" style={{margin:"8px 0 12px"}}>{hfAccessToken ? "Connected as " + hfUsername + ". The token stays only in this open page and is cleared on refresh; Creovanta does not store it." : "Maya ZeroGPU-তে নিজের Free daily quota ব্যবহার করতে Hugging Face-এর Read token একবার সংযুক্ত করুন। কোনো payment card বা paid plan লাগবে না।"}</p>
+            {hfAccessToken ? <button className="btn secondary" onClick={disconnectGenerationAccount}>Disconnect generation account</button> : <>
+              <label htmlFor="hf-read-token">Hugging Face Read token</label>
+              <input id="hf-read-token" className="field" type="password" autoComplete="off" spellCheck={false} value={hfTokenInput} onChange={e=>setHfTokenInput(e.target.value)} placeholder="hf_..." />
+              <button className="btn" style={{width:"100%",marginTop:10}} onClick={connectGenerationAccount} disabled={busy || !hfTokenInput.trim()}>{busy ? "Verifying…" : "Verify & connect"}</button>
+              <p className="small" style={{marginTop:10}}>শুধু <b>Read</b> permission দিন। Token তৈরি করুন: <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer">Hugging Face Access Tokens</a>। Token কাউকে পাঠাবেন না।</p>
+            </>}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14}}>
             <div><label>Voice profile name</label><input className="field" value={voiceName} onChange={e=>setVoiceName(e.target.value)} placeholder="e.g. My Bengali Voice"/></div>
