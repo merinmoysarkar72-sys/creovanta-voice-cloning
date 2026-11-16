@@ -187,8 +187,16 @@ export default function Home() {
     // Maya's /clone_speak endpoint declares ref_audio as a plain string, not
     // Gradio FileData. Upload explicitly, then pass the returned server path.
     setMessage("Maya-তে reference audio আপলোড হচ্ছে…");
-    const sampleFile = new File([sample], "creovanta-reference.wav", {
-      type: sample.type || "audio/wav",
+    const sampleExtension = sample.type.includes("mpeg") ? "mp3"
+      : sample.type.includes("wav") ? "wav"
+      : sample.type.includes("flac") ? "flac"
+      : sample.type.includes("ogg") ? "ogg"
+      : "audio";
+    const sampleName = sample instanceof File && sample.name
+      ? sample.name
+      : "creovanta-reference." + sampleExtension;
+    const sampleFile = new File([sample], sampleName, {
+      type: sample.type || "application/octet-stream",
     });
     const formData = new FormData();
     formData.append("files", sampleFile, sampleFile.name);
