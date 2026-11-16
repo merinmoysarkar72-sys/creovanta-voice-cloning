@@ -183,7 +183,30 @@ export default function Home() {
 
   async function runMayaClone(text: string, sample: Blob, transcript: string, referenceLanguage = "bn") {
     if (!transcript.trim()) throw new Error("Reference Transcript লিখতে হবে।");
-    const args = [text, handle_file(sample), transcript.trim(), referenceLanguage, "bn", true, 0, true];
+
+    // Maya's /clone_speak endpoint declares ref_audio as a plain string, not
+    // Gradio FileData. Upload explicitly, then pass the returned server path.
+    setMessage("Maya-তে reference audio আপলোড হচ্ছে…");
+    const sampleFile = new File([sample], "creovanta-reference.wav", {
+      type: sample.type || "audio/wav",
+    });
+    const formData = new FormData();
+    formData.append("files", sampleFile, sampleFile.name);
+    const uploadResponse = await fetch(MAYA_SPACE_ORIGIN + "/gradio_api/upload", {
+      method: "POST",
+      body: formData,
+    });
+    if (!uploadResponse.ok) {
+      const detail = await uploadResponse.text().catch(() => "");
+      throw new Error("Maya audio upload ব্যর্থ (HTTP " + uploadResponse.status + "). " + detail.slice(0, 300));
+    }
+    const uploadedPaths = await uploadResponse.json() as unknown;
+    const refAudioPath = Array.isArray(uploadedPaths) && typeof uploadedPaths[0] === "string"
+      ? uploadedPaths[0]
+      : "";
+    if (!refAudioPath) throw new Error("Maya upload endpoint কোনো server file path ফেরত দেয়নি।");
+
+    const args = [text, refAudioPath, transcript.trim(), referenceLanguage, "bn", true, 0, true];
     const invoke = async (token?: string) => {
       const client = await Client.connect(MAYA_SPACE, token ? { token: token as `hf_${string}` } : undefined);
       try { return await client.predict("/clone_speak", args); }
@@ -192,6 +215,7 @@ export default function Home() {
         if (typeof close === "function") close.call(client);
       }
     };
+    setMessage("Maya GPU-তে voice cloning request পাঠানো হয়েছে…");
     let result;
     if (hfAccessToken) {
       try { result = await invoke(hfAccessToken); }
@@ -207,6 +231,7 @@ export default function Home() {
     if (!returnedPath) throw new Error("Maya API অডিওর লিংক ফেরত দেয়নি। Response: " + JSON.stringify(raw).slice(0, 500));
     const audioUrl = new URL(returnedPath, MAYA_SPACE_ORIGIN + "/");
     if (audioUrl.origin !== MAYA_SPACE_ORIGIN) throw new Error("Maya অডিওর ঠিকানা নিরাপদ নয়।");
+    setMessage("Maya-র তৈরি অডিও ডাউনলোড হচ্ছে…");
     let audioResponse = await fetch(audioUrl.toString(), hfAccessToken ? { headers: { Authorization: "Bearer " + hfAccessToken } } : undefined);
     if ((audioResponse.status === 401 || audioResponse.status === 403) && hfAccessToken) audioResponse = await fetch(audioUrl.toString());
     if (!audioResponse.ok) {
