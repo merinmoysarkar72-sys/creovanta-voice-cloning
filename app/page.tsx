@@ -216,23 +216,35 @@ export default function Home() {
 
     const args = [text, refAudioPath, transcript.trim(), referenceLanguage, "bn", true, 0, true];
     const invoke = async (token?: string) => {
-      const client = await Client.connect(MAYA_SPACE, token ? { token: token as `hf_${string}` } : undefined);
-      try { return await client.predict("/clone_speak", args); }
-      finally {
+      const client = await Client.connect(
+        MAYA_SPACE,
+        token ? { token: token as `hf_${string}` } : undefined,
+      );
+      try {
+        return await client.predict("/clone_speak", args);
+      } finally {
         const close = (client as unknown as { close?: () => void }).close;
         if (typeof close === "function") close.call(client);
       }
     };
     setMessage("Maya GPU-তে voice cloning request পাঠানো হয়েছে…");
+    // The Maya Space is public. Call it anonymously first so a restricted or
+    // stale personal HF token cannot break an otherwise public inference call.
     let result;
-    if (hfAccessToken) {
-      try { result = await invoke(hfAccessToken); }
-      catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
-        if (!/401|403|unauthori[sz]ed|invalid token|authentication/i.test(reason)) throw new Error("Maya Clone API ব্যর্থ: " + reason);
-        result = await invoke();
+    try {
+      result = await invoke();
+    } catch (anonymousError) {
+      const reason = anonymousError instanceof Error ? anonymousError.message : String(anonymousError);
+      if (!hfAccessToken || !/401|403|unauthori[sz]ed|authentication|login required/i.test(reason)) {
+        throw new Error("Maya Clone API ব্যর্থ: " + reason);
       }
-    } else { result = await invoke(); }
+      try {
+        result = await invoke(hfAccessToken);
+      } catch (authenticatedError) {
+        const detail = authenticatedError instanceof Error ? authenticatedError.message : String(authenticatedError);
+        throw new Error("Maya Clone API ব্যর্থ (anonymous ও authenticated—দুই চেষ্টাই ব্যর্থ): " + detail);
+      }
+    }
     const raw = Array.isArray(result.data) ? result.data[0] : result.data;
     const output = raw as { audio_url?: string; url?: string; duration?: number } | null;
     const returnedPath = output?.audio_url || output?.url;
