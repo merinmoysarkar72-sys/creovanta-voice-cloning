@@ -515,10 +515,28 @@ export default function Home() {
         const saved = await supabase.from("voice_profiles").update({ reference_text: transcript }).eq("id", profileId);
         if (saved.error) throw new Error("স্বয়ংক্রিয় transcript সংরক্ষণ করা যায়নি: " + saved.error.message);
       }
-      const preview = await runMayaClone("আমার কণ্ঠে বাংলা অডিও পরীক্ষা করা হচ্ছে।", sample.data, transcript, profile.language_code || "bn");
-      await updateVoiceProfileStatus(profileId, "ready");
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const sessionToken = sessionData.session?.access_token;
+      if (sessionError || !sessionToken) throw new Error("Creovanta session শেষ হয়েছে। আবার sign in করো।");
+      setMessage("Creovanta Backend দিয়ে Maya-তে নিরাপদে Clone request পাঠানো হচ্ছে…");
+      const response = await fetch("https://creovanta-api.onrender.com/api/v1/speech/voices/clone", {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + sessionToken,
+          "X-HF-Token": hfAccessToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ voice_profile_id: profileId }),
+      });
+      if (!response.ok) {
+        let detail = "Voice cloning failed (HTTP " + response.status + ").";
+        try { const body = await response.json(); detail = body.detail || detail; } catch {}
+        throw new Error(detail);
+      }
+      const previewBlob = await response.blob();
+      if (!previewBlob.size) throw new Error("Maya কোনো অডিও ফেরত দেয়নি।");
       if (clonePreviewUrl) URL.revokeObjectURL(clonePreviewUrl);
-      setClonePreviewUrl(URL.createObjectURL(preview.blob));
+      setClonePreviewUrl(URL.createObjectURL(previewBlob));
       await loadProfiles(profileId);
       setMessage("Voice Profile প্রস্তুত। এখন Text-to-Speech ব্যবহার করতে পারো।");
     } catch (error) {
