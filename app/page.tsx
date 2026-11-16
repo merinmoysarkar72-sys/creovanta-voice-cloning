@@ -181,6 +181,46 @@ export default function Home() {
   const MAYA_SPACE = "maya-research/maya2-native-studio";
   const MAYA_SPACE_ORIGIN = "https://maya-research-maya2-native-studio.hf.space";
 
+  async function convertToMonoWav(file: File): Promise<File> {
+    const AudioContextClass = window.AudioContext;
+    if (!AudioContextClass) throw new Error("এই Browser-এ অডিও WAV-এ রূপান্তর করা যাচ্ছে না। Chrome-এর সর্বশেষ সংস্করণ ব্যবহার করুন।");
+    const context = new AudioContextClass();
+    try {
+      const decoded = await context.decodeAudioData(await file.arrayBuffer());
+      const samples = new Float32Array(decoded.length);
+      for (let channel = 0; channel < decoded.numberOfChannels; channel++) {
+        const data = decoded.getChannelData(channel);
+        for (let i = 0; i < decoded.length; i++) samples[i] += data[i] / decoded.numberOfChannels;
+      }
+
+      const buffer = new ArrayBuffer(44 + samples.length * 2);
+      const view = new DataView(buffer);
+      const writeText = (offset: number, value: string) => {
+        for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i));
+      };
+      writeText(0, "RIFF");
+      view.setUint32(4, 36 + samples.length * 2, true);
+      writeText(8, "WAVE");
+      writeText(12, "fmt ");
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, decoded.sampleRate, true);
+      view.setUint32(28, decoded.sampleRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      writeText(36, "data");
+      view.setUint32(40, samples.length * 2, true);
+      for (let i = 0; i < samples.length; i++) {
+        const value = Math.max(-1, Math.min(1, samples[i]));
+        view.setInt16(44 + i * 2, value < 0 ? value * 0x8000 : value * 0x7fff, true);
+      }
+      return new File([buffer], "creovanta-reference.wav", { type: "audio/wav" });
+    } finally {
+      await context.close().catch(() => undefined);
+    }
+  }
+
   async function runMayaClone(text: string, sample: Blob, transcript: string, referenceLanguage = "bn") {
     if (!transcript.trim()) throw new Error("Reference Transcript লিখতে হবে।");
 
@@ -514,11 +554,12 @@ export default function Home() {
       if (!transcript) throw new Error("Reference Transcript লিখুন—অডিওতে যা বলা হয়েছে ঠিক সেটাই লিখবেন।");
       if (!voiceDescription.trim()) throw new Error("Voice Description ঘরটি পূরণ করুন.");
 
-      setMessage("ব্যক্তিগত voice sample আপলোড হচ্ছে…");
-      const extension = audioFile.name.split(".").pop()?.toLowerCase() || "audio";
-      const objectPath = user.id + "/" + crypto.randomUUID() + "." + extension;
-      const upload = await supabase.storage.from(BUCKET).upload(objectPath, audioFile, {
-        contentType: audioFile.type,
+      setMessage("অডিওকে Maya-সমর্থিত WAV ফরম্যাটে রূপান্তর করা হচ্ছে…");
+      const normalizedSample = await convertToMonoWav(audioFile);
+      setMessage("ব্যক্তিগত WAV voice sample আপলোড হচ্ছে…");
+      const objectPath = user.id + "/" + crypto.randomUUID() + ".wav";
+      const upload = await supabase.storage.from(BUCKET).upload(objectPath, normalizedSample, {
+        contentType: "audio/wav",
         upsert: false,
       });
       if (upload.error) throw new Error("Upload failed: " + upload.error.message);
@@ -555,7 +596,7 @@ export default function Home() {
 
       try {
         setMessage("নমুনা সংরক্ষিত। এখন Voice Profile তৈরি হচ্ছে…");
-        const preview = await runMayaClone("আমার কণ্ঠে বাংলা অডিও পরীক্ষা করা হচ্ছে।", audioFile, transcript, "bn");
+        const preview = await runMayaClone("আমার কণ্ঠে বাংলা অডিও পরীক্ষা করা হচ্ছে।", normalizedSample, transcript, "bn");
         await updateVoiceProfileStatus(profile.data.id, "ready");
         if (clonePreviewUrl) URL.revokeObjectURL(clonePreviewUrl);
         setClonePreviewUrl(URL.createObjectURL(preview.blob));
