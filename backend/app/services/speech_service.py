@@ -1,6 +1,6 @@
 """Per-user Maya 2 Native integration through Hugging Face ZeroGPU.
 
-The caller supplies their own short-lived Hugging Face OAuth access token.
+The caller supplies their own Hugging Face Personal Access Token (PAT).
 It is verified for each request and passed only to the public Maya Space so
 ZeroGPU usage is charged to that caller, never to a shared service token.
 """
@@ -61,8 +61,13 @@ def _bearer_token(authorization: str | None) -> str:
 
 def _hf_token(value: str | None) -> str:
     token = (value or "").strip()
-    if not token or len(token) > 4096 or not token.startswith("hf_"):
-        raise HTTPException(status_code=401, detail="Connect your generation account first")
+    if (
+        not token
+        or len(token) > 4096
+        or not token.startswith("hf_")
+        or token.startswith("hf_oauth_")
+    ):
+        raise HTTPException(status_code=401, detail="Connect a Hugging Face Read token first")
     return token
 
 
@@ -88,7 +93,7 @@ async def _verify_hf_token(client: httpx.AsyncClient, token: str) -> None:
         HF_WHOAMI_URL, headers={"Authorization": f"Bearer {token}"}
     )
     if response.status_code in (401, 403):
-        raise HTTPException(status_code=401, detail="Your generation account connection expired. Connect again.")
+        raise HTTPException(status_code=401, detail="Your Hugging Face Read token is invalid or revoked. Connect a valid Read token.")
     if not response.is_success:
         raise HTTPException(status_code=502, detail="Could not verify the generation account")
 
