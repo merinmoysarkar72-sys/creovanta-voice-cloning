@@ -408,91 +408,90 @@ export default function Home() {
   }
 
   async function uploadVoice() {
-    if (!supabase || !user) return;
-    if (!voiceName.trim()) { setMessage("Give this voice profile a name."); return; }
+    if (busy) return;
+    setMessage("নমুনা যাচাই করা হচ্ছে…");
+    if (!supabase || !user) { setMessage("অ্যাকাউন্টে আবার sign in করো।"); return; }
+    if (!voiceName.trim()) { setMessage("Voice profile-এর একটি নাম লিখুন।"); return; }
     if (!hfAccessToken) { setMessage("আগে generation account connect করো।"); return; }
     if (!referenceText.trim()) { setMessage("রেকর্ডিংয়ে যা বলা হয়েছে, তার হুবহু transcript লিখুন।"); return; }
-    if (!audioFile) { setMessage("Choose an audio file first."); return; }
-    if (!consentAccepted) { setMessage("You must confirm voice ownership or explicit permission."); return; }
-    if (audioFile.size > MAX_FILE_BYTES) { setMessage("The audio file must be 50 MB or smaller."); return; }
-    try {
-      const seconds = await audioDurationSeconds(audioFile);
-      if (!Number.isFinite(seconds) || seconds < 3 || seconds > 10) { setMessage("৩–১০ সেকেন্ডের পরিষ্কার voice sample ব্যবহার করুন।"); return; }
-    } catch (error) { setMessage(error instanceof Error ? error.message : "অডিও ফাইলটি পড়া যাচ্ছে না।"); return; }
+    if (!audioFile) { setMessage("আগে একটি অডিও ফাইল নির্বাচন করুন।"); return; }
+    if (!consentAccepted) { setMessage("কণ্ঠের মালিকানা ও অনুমতির ঘরে সম্মতি দিন।"); return; }
+    if (audioFile.size > MAX_FILE_BYTES) { setMessage("অডিও ফাইল ৫০ MB বা তার কম হতে হবে।"); return; }
     if (!ACCEPTED_TYPES.includes(audioFile.type)) {
-      setMessage("Use a WAV, MP3, FLAC, or OGG audio file.");
+      setMessage("WAV, MP3, FLAC অথবা OGG অডিও ফাইল ব্যবহার করুন।");
       return;
     }
 
     setBusy(true);
-    setMessage("Uploading your private voice sample…");
-    const extension = audioFile.name.split(".").pop()?.toLowerCase() || "audio";
-    const objectPath = user.id + "/" + crypto.randomUUID() + "." + extension;
-    const upload = await supabase.storage.from(BUCKET).upload(objectPath, audioFile, {
-      contentType: audioFile.type,
-      upsert: false,
-    });
-    if (upload.error) {
-      setBusy(false);
-      setMessage("Upload failed: " + upload.error.message);
-      return;
-    }
-
-    const profile = await supabase.from("voice_profiles").insert({
-      user_id: user.id,
-      name: voiceName.trim(),
-      description: voiceDescription.trim() || null,
-      language_code: "bn",
-      reference_text: referenceText.trim(),
-      source_audio_path: objectPath,
-      consent_type: consentType,
-      status: "processing",
-    }).select("id").single();
-
-    if (profile.error || !profile.data) {
-      await supabase.storage.from(BUCKET).remove([objectPath]);
-      setBusy(false);
-      setMessage("Could not save the voice profile: " + (profile.error?.message ?? "Unknown error"));
-      return;
-    }
-
-    const consent = await supabase.from("voice_consents").insert({
-      user_id: user.id,
-      voice_profile_id: profile.data.id,
-      consent_type: consentType,
-      consent_text_version: "creovanta-consent-v3",
-      accepted: true,
-    });
-
-    if (consent.error) {
-      await supabase.from("voice_profiles").delete().eq("id", profile.data.id);
-      await supabase.storage.from(BUCKET).remove([objectPath]);
-      setBusy(false);
-      setMessage("The consent record could not be saved, so the upload was rolled back: " + consent.error.message);
-      return;
-    }
-
     try {
-      await runMayaClone("আমার কণ্ঠে বাংলা অডিও পরীক্ষা করা হচ্ছে।", audioFile, referenceText.trim(), "bn");
-      await updateVoiceProfileStatus(profile.data.id, "ready");
-    } catch (error) {
-      await updateVoiceProfileStatus(profile.data.id, "failed").catch(() => undefined);
-      await loadProfiles(profile.data.id);
-      setBusy(false);
-      setMessage("নমুনা ও সম্মতি সংরক্ষিত হয়েছে, কিন্তু ভয়েস ক্লোন তৈরি হয়নি। " + (error instanceof Error ? error.message : ""));
-      return;
-    }
+      const seconds = await audioDurationSeconds(audioFile);
+      if (!Number.isFinite(seconds) || seconds < 3 || seconds > 10) {
+        throw new Error("৩–১০ সেকেন্ডের পরিষ্কার voice sample ব্যবহার করুন।");
+      }
 
-    setVoiceName("");
-    setVoiceDescription("");
-    setReferenceText("");
-    setAudioFile(null);
-    setConsentAccepted(false);
-    const input = document.getElementById("voice-audio") as HTMLInputElement | null;
-    if (input) input.value = "";
-    await loadProfiles();
-    setBusy(false);
-    setMessage("Creovanta Voice Profile প্রস্তুত। এখন এই Profile দিয়ে বাংলা Text-to-Speech ব্যবহার করতে পারো।");
+      setMessage("ব্যক্তিগত voice sample আপলোড হচ্ছে…");
+      const extension = audioFile.name.split(".").pop()?.toLowerCase() || "audio";
+      const objectPath = user.id + "/" + crypto.randomUUID() + "." + extension;
+      const upload = await supabase.storage.from(BUCKET).upload(objectPath, audioFile, {
+        contentType: audioFile.type,
+        upsert: false,
+      });
+      if (upload.error) throw new Error("Upload failed: " + upload.error.message);
+
+      const profile = await supabase.from("voice_profiles").insert({
+        user_id: user.id,
+        name: voiceName.trim(),
+        description: voiceDescription.trim() || null,
+        language_code: "bn",
+        reference_text: referenceText.trim(),
+        source_audio_path: objectPath,
+        consent_type: consentType,
+        status: "processing",
+      }).select("id").single();
+
+      if (profile.error || !profile.data) {
+        await supabase.storage.from(BUCKET).remove([objectPath]);
+        throw new Error("Voice Profile সংরক্ষণ করা যায়নি: " + (profile.error?.message ?? "Unknown error"));
+      }
+
+      const consent = await supabase.from("voice_consents").insert({
+        user_id: user.id,
+        voice_profile_id: profile.data.id,
+        consent_type: consentType,
+        consent_text_version: "creovanta-consent-v3",
+        accepted: true,
+      });
+
+      if (consent.error) {
+        await supabase.from("voice_profiles").delete().eq("id", profile.data.id);
+        await supabase.storage.from(BUCKET).remove([objectPath]);
+        throw new Error("সম্মতির তথ্য সংরক্ষণ করা যায়নি: " + consent.error.message);
+      }
+
+      try {
+        setMessage("নমুনা সংরক্ষিত। এখন Voice Profile তৈরি হচ্ছে…");
+        await runMayaClone("আমার কণ্ঠে বাংলা অডিও পরীক্ষা করা হচ্ছে।", audioFile, referenceText.trim(), "bn");
+        await updateVoiceProfileStatus(profile.data.id, "ready");
+      } catch (error) {
+        await updateVoiceProfileStatus(profile.data.id, "failed").catch(() => undefined);
+        await loadProfiles(profile.data.id);
+        throw new Error("নমুনা ও সম্মতি সংরক্ষিত হয়েছে, কিন্তু ভয়েস ক্লোন তৈরি হয়নি। " + (error instanceof Error ? error.message : ""));
+      }
+
+      setVoiceName("");
+      setVoiceDescription("");
+      setReferenceText("");
+      setAudioFile(null);
+      setConsentAccepted(false);
+      const input = document.getElementById("voice-audio") as HTMLInputElement | null;
+      if (input) input.value = "";
+      await loadProfiles(profile.data.id);
+      setMessage("Creovanta Voice Profile প্রস্তুত। এখন বাংলা Text-to-Speech ব্যবহার করতে পারো।");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "নমুনা সংরক্ষণ করা যায়নি। আবার চেষ্টা করো।");
+    } finally {
+      setBusy(false);
+    }
   }
 
   const bars = [18,32,48,26,62,84,45,28,70,94,58,34,76,50,22,64,86,42,26,56,72,38,18,48,66,30,52,82,40,20,60,34,76,46,24,58,88,42,18,50];
