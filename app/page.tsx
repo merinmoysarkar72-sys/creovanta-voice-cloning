@@ -267,23 +267,15 @@ export default function Home() {
         if (typeof close === "function") close.call(client);
       }
     };
-    setMessage("Maya GPU-তে voice cloning request পাঠানো হয়েছে…");
-    // The Maya Space is public. Call it anonymously first so a restricted or
-    // stale personal HF token cannot break an otherwise public inference call.
+    setMessage("তোমার Hugging Face account-এর Free GPU quota দিয়ে Maya-তে request পাঠানো হচ্ছে…");
+    // Use the connected user's token first. Anonymous ZeroGPU quota is much
+    // smaller and can fail with a generic Gradio error before token fallback.
     let result;
     try {
-      result = await invoke();
-    } catch (anonymousError) {
-      const reason = anonymousError instanceof Error ? anonymousError.message : String(anonymousError);
-      if (!hfAccessToken || !/401|403|unauthori[sz]ed|authentication|login required/i.test(reason)) {
-        throw new Error("Maya Clone API ব্যর্থ: " + reason);
-      }
-      try {
-        result = await invoke(hfAccessToken);
-      } catch (authenticatedError) {
-        const detail = authenticatedError instanceof Error ? authenticatedError.message : String(authenticatedError);
-        throw new Error("Maya Clone API ব্যর্থ (anonymous ও authenticated—দুই চেষ্টাই ব্যর্থ): " + detail);
-      }
+      result = await invoke(hfAccessToken);
+    } catch (authenticatedError) {
+      const detail = authenticatedError instanceof Error ? authenticatedError.message : String(authenticatedError);
+      throw new Error("Maya Clone API ব্যর্থ (তোমার Hugging Face account দিয়ে): " + detail);
     }
     const raw = Array.isArray(result.data) ? result.data[0] : result.data;
     const output = raw as { audio_url?: string; url?: string; duration?: number } | null;
