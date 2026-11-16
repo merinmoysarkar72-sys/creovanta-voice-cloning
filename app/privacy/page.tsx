@@ -16,7 +16,7 @@ export default function PrivacyPolicy() {
       <h2>1. Information we handle</h2>
       <ul>
         <li><b>Account information:</b> email address and authentication data needed to create and secure your account. Password authentication is managed by Supabase; Creovanta does not receive your plaintext password.</li>
-        <li><b>Voice profile information:</b> profile name, optional description, language, voice ownership selection, consent record, and a transcript automatically generated from the reference recording.</li>
+        <li><b>Voice profile information:</b> profile name, required voice description, language, voice ownership selection, consent record, and the reference transcript entered by the user to match the uploaded recording.</li>
         <li><b>Voice recordings:</b> audio samples you upload for voice cloning. They are stored in a private Supabase Storage bucket associated with your account.</li>
         <li><b>Text and generated audio:</b> the text you submit is sent to Creovanta speech processing for generation. Generated audio history is stored locally in your browser/device unless a future feature clearly says otherwise; it is not currently a cloud audio-history service.</li>
         <li><b>generation account connection:</b> if you connect your generation account, the authorization token is held in the current browser page memory and is not intentionally saved by Creovanta. Refreshing or closing the page clears it.</li>
@@ -31,7 +31,7 @@ export default function PrivacyPolicy() {
         <li><b>Supabase</b> provides account authentication, database services, and private voice-sample storage.</li>
         <li><b>Vercel</b> hosts the Creovanta web application.</li>
         <li><b>Render</b> hosts the Creovanta API backend.</li>
-        <li><b>External speech processing:</b> when you create a voice profile, your reference recording is sent securely to a Hugging Face-hosted Bengali speech-recognition service to generate its transcript automatically. The recording and generated transcript are then sent to the Hugging Face-hosted Maya speech service for voice cloning and speech generation. Hugging Face and the respective service operators control their own infrastructure and retention practices.</li>
+        <li><b>External speech processing:</b> when you create a voice profile, your reference recording and the transcript you enter are sent to the Hugging Face-hosted Maya speech service for voice cloning and speech generation. Hugging Face and the respective service operators control their own infrastructure and retention practices.</li>
       </ul>
       <p>We do not sell personal information. External providers process data under their own terms and privacy policies. Do not upload another person's voice unless you have explicit permission.</p>
 
