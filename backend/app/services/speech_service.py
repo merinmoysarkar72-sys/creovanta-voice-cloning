@@ -262,6 +262,10 @@ async def _set_profile_status(
         "Content-Type": "application/json",
         "Prefer": "return=minimal",
     }
+    # Legacy service_role keys are JWTs and must also be sent as Bearer.
+    # New sb_secret_* keys are opaque API keys and must remain apikey-only.
+    if service_key.startswith("eyJ"):
+        headers["Authorization"] = f"Bearer {service_key}"
     response = await client.patch(
         f"{supabase_url}/rest/v1/voice_profiles",
         params={"id": f"eq.{profile_id}", "user_id": f"eq.{user_id}"},
