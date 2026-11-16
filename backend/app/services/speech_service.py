@@ -178,13 +178,27 @@ def _call_speech_clone(
     reference_language: str,
 ) -> dict[str, Any]:
     """Blocking Gradio client call; run in a worker thread from async routes."""
-    from gradio_client import Client, handle_file
+    from gradio_client import Client
+
+    # Maya's API declares ref_audio as a plain server path (str), not FileData.
+    # Upload explicitly first, then pass the returned path to /clone_speak.
+    with open(audio_path, "rb") as audio_file:
+        upload = httpx.post(
+            f"{HF_SPACE_URL}/gradio_api/upload",
+            headers={"Authorization": f"Bearer {hf_token}"},
+            files={"files": (Path(audio_path).name, audio_file, "audio/wav")},
+            timeout=60.0,
+        )
+    upload.raise_for_status()
+    uploaded = upload.json()
+    if not isinstance(uploaded, list) or not uploaded or not isinstance(uploaded[0], str):
+        raise RuntimeError("Maya upload did not return a server file path")
 
     client = Client(HF_SPACE_ID, token=hf_token, verbose=False, analytics_enabled=False, httpx_kwargs={"timeout": 240})
     try:
         result = client.predict(
             text,
-            handle_file(audio_path),
+            uploaded[0],
             reference_text,
             reference_language,
             "bn",
@@ -318,8 +332,8 @@ async def clone_voice(
     request: CloneRequest,
     authorization: str | None = Header(default=None),
     hf_token_header: str | None = Header(default=None, alias="X-HF-Token"),
-) -> dict[str, str]:
-    """Validate ownership/consent and run a real reference-audio cloning smoke test."""
+ ) -> Response:
+    """Validate ownership/consent and return a real reference-audio cloning result."""
     token = _bearer_token(authorization)
     hf_token = _hf_token(hf_token_header)
     supabase_url = _required_env("SUPABASE_URL").rstrip("/")
@@ -351,7 +365,16 @@ async def clone_voice(
             await _set_profile_status(
                 client, supabase_url, service_key, request.voice_profile_id, user_id, "ready"
             )
-            return {"status": "ready", "message": "Your Creovanta voice profile passed the cloning test"}
+            return Response(
+                content=audio,
+                media_type="audio/wav",
+                headers={
+                    "Content-Disposition": 'inline; filename="creovanta-voice-preview.wav"',
+                    "Cache-Control": "no-store",
+                    "X-Content-Type-Options": "nosniff",
+                    "X-Creovanta-Voice-Status": "ready",
+                },
+            )
     except HTTPException as exc:
         if exc.status_code not in (401, 403, 404, 409, 422):
             try:
