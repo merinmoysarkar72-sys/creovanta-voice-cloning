@@ -185,7 +185,7 @@ export default function Home() {
     if (!transcript.trim()) throw new Error("Reference Transcript লিখতে হবে।");
     const args = [text, handle_file(sample), transcript.trim(), referenceLanguage, "bn", true, 0, true];
     const invoke = async (token?: string) => {
-      const client = await Client.connect(MAYA_SPACE, token ? { token } : undefined);
+      const client = await Client.connect(MAYA_SPACE, token ? { token: token as `hf_${string}` } : undefined);
       try { return await client.predict("/clone_speak", args); }
       finally {
         const close = (client as unknown as { close?: () => void }).close;
