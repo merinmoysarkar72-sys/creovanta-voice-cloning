@@ -72,7 +72,8 @@ async def delete_account(authorization: str | None = Header(default=None)) -> di
                     if isinstance(item, dict) and item.get("name") and item.get("id") is not None
                 ]
                 if paths:
-                    removal = await client.delete(
+                    removal = await client.request(
+                        "DELETE",
                         f"{supabase_url}/storage/v1/object/{BUCKET}",
                         headers=admin_headers,
                         json={"prefixes": paths},
