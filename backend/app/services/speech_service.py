@@ -7,6 +7,7 @@ ZeroGPU usage is charged to that caller, never to a shared service token.
 from __future__ import annotations
 
 import asyncio
+import mimetypes
 import os
 import tempfile
 from pathlib import Path
@@ -186,7 +187,7 @@ def _call_speech_clone(
         upload = httpx.post(
             f"{HF_SPACE_URL}/gradio_api/upload",
             headers={"Authorization": f"Bearer {hf_token}"},
-            files={"files": (Path(audio_path).name, audio_file, "audio/wav")},
+            files={"files": (Path(audio_path).name, audio_file, mimetypes.guess_type(audio_path)[0] or "application/octet-stream")},
             timeout=60.0,
         )
     upload.raise_for_status()
