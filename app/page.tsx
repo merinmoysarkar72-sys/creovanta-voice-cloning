@@ -632,7 +632,7 @@ export default function Home() {
           <label>Voice Description (required)</label><textarea className="field" rows={2} required value={voiceDescription} onChange={e=>setVoiceDescription(e.target.value)} placeholder="Describe the natural voice style" style={{resize:"vertical",lineHeight:1.6}}/>
           <label htmlFor="voice-audio">Audio sample (WAV, MP3, FLAC, OGG · max 50 MB)</label>
           <input id="voice-audio" className="field" type="file" accept=".wav,.mp3,.flac,.ogg,.oga,audio/wav,audio/mpeg,audio/flac,audio/ogg" onChange={e=>setAudioFile(e.target.files?.[0] ?? null)}/>
-          <p className="small" style={{marginTop:8,marginBottom:12}}>৩–১০ সেকেন্ডের পরিষ্কার বাংলা voice sample ব্যবহার করুন।</p>
+          <p className="small" style={{marginTop:8,marginBottom:12}}>Maya-এর reference voice নিয়ম অনুযায়ী ৩–১০ সেকেন্ডের পরিষ্কার বাংলা অডিও দিন। ১০ সেকেন্ডের বেশি হলে ছোট করে কাটুন এবং Transcript-এ শুধু ওই অংশের কথাগুলো লিখুন।</p>
           <label>Reference Transcript (required)</label>
           <textarea className="field" rows={3} required value={referenceTranscript} onChange={e=>setReferenceTranscript(e.target.value)} placeholder="অডিওতে যা বলা হয়েছে ঠিক সেটাই এখানে লিখুন…" style={{resize:"vertical",lineHeight:1.7}}/>
           <p className="small" style={{marginTop:6,marginBottom:12}}>অডিওতে বলা কথাগুলো হুবহু লিখুন। ভুল বা অসম্পূর্ণ Transcript হলে কণ্ঠের মিল কমতে পারে।</p>
@@ -642,6 +642,7 @@ export default function Home() {
             আমি নিশ্চিত করছি এটি আমার নিজের কণ্ঠ অথবা কণ্ঠের মালিকের স্পষ্ট অনুমতি আছে। আমি নমুনা অডিও ও আমার দেওয়া Transcript voice cloning-এর জন্য পাঠাতে সম্মত.
           </label>
           <button className="btn" style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9}} onClick={uploadVoice} disabled={busy}><UploadCloud size={17}/>{busy ? "Maya-তে Voice Clone চলছে…" : "Voice Clone"}</button>
+          {message && <div className="status" role="status" aria-live="polite" style={{marginTop:12,whiteSpace:"pre-wrap"}}>{message}</div>}
           <div style={{marginTop:28,borderTop:"1px solid #293044",paddingTop:22}}>
             <h3 style={{fontSize:20,letterSpacing:"-.5px"}}>Creovanta বাংলা Text-to-Speech</h3>
             <p className="small" style={{marginBottom:14}}>তোমার অনুমোদিত voice profile ব্যবহার করে বাংলা লেখা থেকে অডিও তৈরি করো। সর্বোচ্চ ১২০০ অক্ষর।</p>
