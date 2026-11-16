@@ -94,7 +94,9 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [profiles, setProfiles] = useState<VoiceProfile[]>([]);
   const [voiceName, setVoiceName] = useState("");
-  const [voiceDescription, setVoiceDescription] = useState("");
+  const DEFAULT_VOICE_DESCRIPTION = "Speak naturally and clearly. Keep the original voice, tone, pronunciation, and speaking style consistent.";
+  const [voiceDescription, setVoiceDescription] = useState(DEFAULT_VOICE_DESCRIPTION);
+  const [referenceTranscript, setReferenceTranscript] = useState("");
   const [hfAccessToken, setHfAccessToken] = useState("");
   const [hfUsername, setHfUsername] = useState("");
   const [consentType, setConsentType] = useState<"self" | "authorized">("self");
@@ -180,31 +182,42 @@ export default function Home() {
   const MAYA_SPACE_ORIGIN = "https://maya-research-maya2-native-studio.hf.space";
 
   async function runMayaClone(text: string, sample: Blob, transcript: string, referenceLanguage = "bn") {
-    if (!hfAccessToken) throw new Error("আগে generation account connect করো।");
-    if (!hfAccessToken.startsWith("hf_")) throw new Error("Generation account token is invalid. Reconnect and try again.");
-    const client = await Client.connect(MAYA_SPACE, { token: hfAccessToken as `hf_${string}` });
-    const result = await client.predict("/clone_speak", [
-      text,
-      handle_file(sample),
-      transcript,
-      referenceLanguage,
-      "bn",
-      true,
-      0,
-      true,
-    ]);
+    if (!transcript.trim()) throw new Error("Reference Transcript লিখতে হবে।");
+    const args = [text, handle_file(sample), transcript.trim(), referenceLanguage, "bn", true, 0, true];
+    const invoke = async (token?: string) => {
+      const client = await Client.connect(MAYA_SPACE, token ? { token } : undefined);
+      try { return await client.predict("/clone_speak", args); }
+      finally {
+        const close = (client as unknown as { close?: () => void }).close;
+        if (typeof close === "function") close.call(client);
+      }
+    };
+    let result;
+    if (hfAccessToken) {
+      try { result = await invoke(hfAccessToken); }
+      catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        if (!/401|403|unauthori[sz]ed|invalid token|authentication/i.test(reason)) throw new Error("Maya Clone API ব্যর্থ: " + reason);
+        result = await invoke();
+      }
+    } else { result = await invoke(); }
     const raw = Array.isArray(result.data) ? result.data[0] : result.data;
-    const output = raw as { audio_url?: string; duration?: number } | null;
-    if (!output?.audio_url) throw new Error("Maya থেকে অডিও পাওয়া যায়নি। আবার চেষ্টা করো।");
-    const audioUrl = new URL(output.audio_url, MAYA_SPACE_ORIGIN + "/");
-    if (audioUrl.origin !== MAYA_SPACE_ORIGIN) throw new Error("অডিওর ঠিকানা নিরাপদ নয়।");
-    const audioResponse = await fetch(audioUrl.toString(), {
-      headers: { Authorization: "Bearer " + hfAccessToken },
-    });
-    if (!audioResponse.ok) throw new Error("তৈরি অডিও ডাউনলোড করা যায়নি (HTTP " + audioResponse.status + ")।");
+    const output = raw as { audio_url?: string; url?: string; duration?: number } | null;
+    const returnedPath = output?.audio_url || output?.url;
+    if (!returnedPath) throw new Error("Maya API অডিওর লিংক ফেরত দেয়নি। Response: " + JSON.stringify(raw).slice(0, 500));
+    const audioUrl = new URL(returnedPath, MAYA_SPACE_ORIGIN + "/");
+    if (audioUrl.origin !== MAYA_SPACE_ORIGIN) throw new Error("Maya অডিওর ঠিকানা নিরাপদ নয়।");
+    let audioResponse = await fetch(audioUrl.toString(), hfAccessToken ? { headers: { Authorization: "Bearer " + hfAccessToken } } : undefined);
+    if ((audioResponse.status === 401 || audioResponse.status === 403) && hfAccessToken) audioResponse = await fetch(audioUrl.toString());
+    if (!audioResponse.ok) {
+      const detail = await audioResponse.text().catch(() => "");
+      throw new Error("Maya অডিও ফাইল আনতে পারেনি (HTTP " + audioResponse.status + "). " + detail.slice(0, 250));
+    }
     const blob = await audioResponse.blob();
     if (!blob.size) throw new Error("Maya খালি অডিও পাঠিয়েছে।");
-    return { blob, contentType: audioResponse.headers.get("content-type") || "audio/wav" };
+    const contentType = audioResponse.headers.get("content-type") || "audio/wav";
+    if (!contentType.startsWith("audio/") && !contentType.includes("octet-stream")) throw new Error("Maya অডিওর বদলে অন্য Response পাঠিয়েছে: " + contentType);
+    return { blob, contentType };
   }
 
   async function transcribeAudio(sample: Blob): Promise<string> {
@@ -452,8 +465,9 @@ export default function Home() {
         throw new Error("৩–১০ সেকেন্ডের পরিষ্কার voice sample ব্যবহার করুন।");
       }
 
-      setMessage("অডিও থেকে কথা স্বয়ংক্রিয়ভাবে শনাক্ত হচ্ছে…");
-      const transcript = await transcribeAudio(audioFile);
+      const transcript = referenceTranscript.trim();
+      if (!transcript) throw new Error("Reference Transcript লিখুন—অডিওতে যা বলা হয়েছে ঠিক সেটাই লিখবেন।");
+      if (!voiceDescription.trim()) throw new Error("Voice Description ঘরটি পূরণ করুন.");
 
       setMessage("ব্যক্তিগত voice sample আপলোড হচ্ছে…");
       const extension = audioFile.name.split(".").pop()?.toLowerCase() || "audio";
@@ -507,7 +521,7 @@ export default function Home() {
       }
 
       setVoiceName("");
-      setVoiceDescription("");
+      setVoiceDescription(DEFAULT_VOICE_DESCRIPTION);
       setAudioFile(null);
       setConsentAccepted(false);
       const input = document.getElementById("voice-audio") as HTMLInputElement | null;
@@ -582,17 +596,19 @@ export default function Home() {
             <div><label>Voice profile name</label><input className="field" value={voiceName} onChange={e=>setVoiceName(e.target.value)} placeholder="e.g. My Bengali Voice"/></div>
             <div><label>Voice ownership</label><select className="field" value={consentType} onChange={e=>setConsentType(e.target.value as "self"|"authorized")}><option value="self">This is my own voice</option><option value="authorized">I have explicit permission</option></select></div>
           </div>
-          <label>Short description (optional)</label><input className="field" value={voiceDescription} onChange={e=>setVoiceDescription(e.target.value)} placeholder="Voice style or notes"/>
+          <label>Voice Description (required)</label><textarea className="field" rows={2} required value={voiceDescription} onChange={e=>setVoiceDescription(e.target.value)} placeholder="Describe the natural voice style" style={{resize:"vertical",lineHeight:1.6}}/>
           <label htmlFor="voice-audio">Audio sample (WAV, MP3, FLAC, OGG · max 50 MB)</label>
           <input id="voice-audio" className="field" type="file" accept=".wav,.mp3,.flac,.ogg,.oga,audio/wav,audio/mpeg,audio/flac,audio/ogg" onChange={e=>setAudioFile(e.target.files?.[0] ?? null)}/>
-          <p className="small" style={{marginTop:8,marginBottom:12}}>৩–১০ সেকেন্ডের পরিষ্কার বাংলা voice sample ব্যবহার করুন। অডিওর কথাগুলো স্বয়ংক্রিয়ভাবে শনাক্ত হবে—কিছু লিখতে হবে না।</p>
-          <p className="small" style={{marginTop:-6,marginBottom:12}}>বাংলায় পরিষ্কার একক কণ্ঠের ৩–১০ সেকেন্ডের নমুনা ব্যবহার করুন। Transcript ভুল হলে কণ্ঠের মিল কমতে পারে।</p>
-          <p className="small" style={{margin:"12px 0 8px"}}>গুরুত্বপূর্ণ: voice cloning-এর জন্য নমুনা অডিও স্বয়ংক্রিয় transcription ও speech processing service-এ পাঠানো হবে। বাইরের service-এর retention Creovanta সরাসরি নিয়ন্ত্রণ করে না.</p>
+          <p className="small" style={{marginTop:8,marginBottom:12}}>৩–১০ সেকেন্ডের পরিষ্কার বাংলা voice sample ব্যবহার করুন।</p>
+          <label>Reference Transcript (required)</label>
+          <textarea className="field" rows={3} required value={referenceTranscript} onChange={e=>setReferenceTranscript(e.target.value)} placeholder="অডিওতে যা বলা হয়েছে ঠিক সেটাই এখানে লিখুন…" style={{resize:"vertical",lineHeight:1.7}}/>
+          <p className="small" style={{marginTop:6,marginBottom:12}}>অডিওতে বলা কথাগুলো হুবহু লিখুন। ভুল বা অসম্পূর্ণ Transcript হলে কণ্ঠের মিল কমতে পারে।</p>
+          <p className="small" style={{margin:"12px 0 8px"}}>গুরুত্বপূর্ণ: voice cloning-এর জন্য নমুনা অডিও ও আপনার দেওয়া Transcript Hugging Face-এর Maya speech processing service-এ পাঠানো হবে। বাইরের service-এর retention Creovanta সরাসরি নিয়ন্ত্রণ করে না.</p>
           <label style={{display:"flex",alignItems:"flex-start",gap:10,margin:"10px 0 18px",lineHeight:1.5}}>
             <input type="checkbox" checked={consentAccepted} onChange={e=>setConsentAccepted(e.target.checked)} style={{marginTop:3}}/>
-            আমি নিশ্চিত করছি এটি আমার নিজের কণ্ঠ অথবা কণ্ঠের মালিকের স্পষ্ট অনুমতি আছে। আমি নমুনা অডিও স্বয়ংক্রিয় transcription ও voice cloning-এর জন্য পাঠাতে সম্মত.
+            আমি নিশ্চিত করছি এটি আমার নিজের কণ্ঠ অথবা কণ্ঠের মালিকের স্পষ্ট অনুমতি আছে। আমি নমুনা অডিও ও আমার দেওয়া Transcript voice cloning-এর জন্য পাঠাতে সম্মত.
           </label>
-          <button className="btn" style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9}} onClick={uploadVoice} disabled={busy}><UploadCloud size={17}/>{busy ? "Voice clone তৈরি হচ্ছে…" : "Voice Clone"}</button>
+          <button className="btn" style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9}} onClick={uploadVoice} disabled={busy}><UploadCloud size={17}/>{busy ? "Maya-তে Voice Clone চলছে…" : "Voice Clone"}</button>
           <div style={{marginTop:28,borderTop:"1px solid #293044",paddingTop:22}}>
             <h3 style={{fontSize:20,letterSpacing:"-.5px"}}>Creovanta বাংলা Text-to-Speech</h3>
             <p className="small" style={{marginBottom:14}}>তোমার অনুমোদিত voice profile ব্যবহার করে বাংলা লেখা থেকে অডিও তৈরি করো। সর্বোচ্চ ১২০০ অক্ষর।</p>
