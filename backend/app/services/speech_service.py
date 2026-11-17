@@ -206,7 +206,7 @@ def _call_speech_clone(
             2.0,
             True,
             1.0,
-            None,
+            0,
             True,
             True,
             api_name="/_clone_fn",
