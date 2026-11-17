@@ -185,8 +185,6 @@ export default function Home() {
   }
 
 
-  const MAYA_SPACE = "maya-research/maya2-native-studio";
-  const MAYA_SPACE_ORIGIN = "https://maya-research-maya2-native-studio.hf.space";
 
   async function convertToMonoWav(file: File): Promise<File> {
     const AudioContextClass = window.AudioContext;
@@ -226,82 +224,6 @@ export default function Home() {
     } finally {
       await context.close().catch(() => undefined);
     }
-  }
-
-  async function runMayaClone(text: string, sample: Blob, transcript: string, referenceLanguage = "bn") {
-    if (!transcript.trim()) throw new Error("Reference Transcript লিখতে হবে।");
-
-    // Maya's /clone_speak endpoint declares ref_audio as a plain string, not
-    // Gradio FileData. Upload explicitly, then pass the returned server path.
-    setMessage("Maya-তে reference audio আপলোড হচ্ছে…");
-    const sampleExtension = sample.type.includes("mpeg") ? "mp3"
-      : sample.type.includes("wav") ? "wav"
-      : sample.type.includes("flac") ? "flac"
-      : sample.type.includes("ogg") ? "ogg"
-      : "audio";
-    const sampleName = sample instanceof File && sample.name
-      ? sample.name
-      : "creovanta-reference." + sampleExtension;
-    const sampleFile = new File([sample], sampleName, {
-      type: sample.type || "application/octet-stream",
-    });
-    const formData = new FormData();
-    formData.append("files", sampleFile, sampleFile.name);
-    const uploadResponse = await fetch(MAYA_SPACE_ORIGIN + "/gradio_api/upload", {
-      method: "POST",
-      body: formData,
-    });
-    if (!uploadResponse.ok) {
-      const detail = await uploadResponse.text().catch(() => "");
-      throw new Error("Maya audio upload ব্যর্থ (HTTP " + uploadResponse.status + "). " + detail.slice(0, 300));
-    }
-    const uploadedPaths = await uploadResponse.json() as unknown;
-    const refAudioPath = Array.isArray(uploadedPaths) && typeof uploadedPaths[0] === "string"
-      ? uploadedPaths[0]
-      : "";
-    if (!refAudioPath) throw new Error("Maya upload endpoint কোনো server file path ফেরত দেয়নি।");
-
-    const args = [text, refAudioPath, transcript.trim(), referenceLanguage, "bn", true, 0, true];
-    const invoke = async (token?: string) => {
-      const client = await Client.connect(
-        MAYA_SPACE,
-        token ? { token: token as `hf_${string}` } : undefined,
-      );
-      try {
-        return await client.predict("/clone_speak", args);
-      } finally {
-        const close = (client as unknown as { close?: () => void }).close;
-        if (typeof close === "function") close.call(client);
-      }
-    };
-    setMessage("তোমার Hugging Face account-এর Free GPU quota দিয়ে Maya-তে request পাঠানো হচ্ছে…");
-    // Use the connected user's token first. Anonymous ZeroGPU quota is much
-    // smaller and can fail with a generic Gradio error before token fallback.
-    let result;
-    try {
-      result = await invoke(hfAccessToken);
-    } catch (authenticatedError) {
-      const detail = authenticatedError instanceof Error ? authenticatedError.message : String(authenticatedError);
-      throw new Error("Maya Clone API ব্যর্থ (তোমার Hugging Face account দিয়ে): " + detail);
-    }
-    const raw = Array.isArray(result.data) ? result.data[0] : result.data;
-    const output = raw as { audio_url?: string; url?: string; duration?: number } | null;
-    const returnedPath = output?.audio_url || output?.url;
-    if (!returnedPath) throw new Error("Maya API অডিওর লিংক ফেরত দেয়নি। Response: " + JSON.stringify(raw).slice(0, 500));
-    const audioUrl = new URL(returnedPath, MAYA_SPACE_ORIGIN + "/");
-    if (audioUrl.origin !== MAYA_SPACE_ORIGIN) throw new Error("Maya অডিওর ঠিকানা নিরাপদ নয়।");
-    setMessage("Maya-র তৈরি অডিও ডাউনলোড হচ্ছে…");
-    let audioResponse = await fetch(audioUrl.toString(), hfAccessToken ? { headers: { Authorization: "Bearer " + hfAccessToken } } : undefined);
-    if ((audioResponse.status === 401 || audioResponse.status === 403) && hfAccessToken) audioResponse = await fetch(audioUrl.toString());
-    if (!audioResponse.ok) {
-      const detail = await audioResponse.text().catch(() => "");
-      throw new Error("Maya অডিও ফাইল আনতে পারেনি (HTTP " + audioResponse.status + "). " + detail.slice(0, 250));
-    }
-    const blob = await audioResponse.blob();
-    if (!blob.size) throw new Error("Maya খালি অডিও পাঠিয়েছে।");
-    const contentType = audioResponse.headers.get("content-type") || "audio/wav";
-    if (!contentType.startsWith("audio/") && !contentType.includes("octet-stream")) throw new Error("Maya অডিওর বদলে অন্য Response পাঠিয়েছে: " + contentType);
-    return { blob, contentType };
   }
 
   async function transcribeAudio(sample: Blob): Promise<string> {
@@ -470,14 +392,29 @@ export default function Home() {
     const maxSpeechChars = 1200;
     if (transcript.length > maxSpeechChars) { setMessage("সর্বোচ্চ " + maxSpeechChars + " অক্ষর লেখা যাবে।"); return; }
     setGenerating(true);
-    setMessage("তোমার কণ্ঠে অডিও তৈরি হচ্ছে… প্রথমবার GPU চালু হতে প্রায় এক মিনিট লাগতে পারে।");
+    setMessage("তোমার কণ্ঠে অডিও তৈরি হচ্ছে… Hugging Face ZeroGPU চালু হতে কিছুক্ষণ লাগতে পারে।");
     try {
-      const sample = await supabase.storage.from(BUCKET).download(profile.source_audio_path);
-      if (sample.error || !sample.data) throw new Error("ব্যক্তিগত voice sample পাওয়া যায়নি। আবার upload করো।");
-      const generated = await runMayaClone(transcript, sample.data, profile.reference_text, profile.language_code || "bn");
-      const blob = generated.blob;
-      const contentType = generated.contentType;
-      const extension = contentType.includes("mpeg") ? "mp3" : "wav";
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const sessionToken = sessionData.session?.access_token;
+      if (sessionError || !sessionToken) throw new Error("Creovanta session শেষ হয়েছে। আবার sign in করো।");
+      const response = await fetch("https://creovanta-api.onrender.com/api/v1/speech/tts", {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + sessionToken,
+          "X-HF-Token": hfAccessToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ voice_profile_id: profile.id, text: transcript }),
+      });
+      if (!response.ok) {
+        let detail = "Speech generation failed (HTTP " + response.status + ").";
+        try { const body = await response.json(); detail = body.detail || detail; } catch {}
+        throw new Error(detail);
+      }
+      const blob = await response.blob();
+      if (!blob.size) throw new Error("OmniVoice কোনো অডিও ফেরত দেয়নি।");
+      const contentType = blob.type || "audio/wav";
+      const extension = "wav";
       const nextUrl = URL.createObjectURL(new Blob([blob], { type: contentType }));
       setAudioExtension(extension);
       setAudioUrl(nextUrl);
@@ -518,7 +455,7 @@ export default function Home() {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       const sessionToken = sessionData.session?.access_token;
       if (sessionError || !sessionToken) throw new Error("Creovanta session শেষ হয়েছে। আবার sign in করো।");
-      setMessage("Creovanta Backend দিয়ে Maya-তে নিরাপদে Clone request পাঠানো হচ্ছে…");
+      setMessage("Creovanta Backend দিয়ে OmniVoice ZeroGPU-তে নিরাপদে Clone request পাঠানো হচ্ছে…");
       const response = await fetch("https://creovanta-api.onrender.com/api/v1/speech/voices/clone", {
         method: "POST",
         headers: {
@@ -534,7 +471,7 @@ export default function Home() {
         throw new Error(detail);
       }
       const previewBlob = await response.blob();
-      if (!previewBlob.size) throw new Error("Maya কোনো অডিও ফেরত দেয়নি।");
+      if (!previewBlob.size) throw new Error("OmniVoice কোনো অডিও ফেরত দেয়নি।");
       if (clonePreviewUrl) URL.revokeObjectURL(clonePreviewUrl);
       setClonePreviewUrl(URL.createObjectURL(previewBlob));
       await loadProfiles(profileId);
@@ -573,7 +510,7 @@ export default function Home() {
       if (!transcript) throw new Error("Reference Transcript লিখুন—অডিওতে যা বলা হয়েছে ঠিক সেটাই লিখবেন।");
       if (!voiceDescription.trim()) throw new Error("Voice Description ঘরটি পূরণ করুন.");
 
-      setMessage("অডিওকে Maya-সমর্থিত WAV ফরম্যাটে রূপান্তর করা হচ্ছে…");
+      setMessage("অডিওকে OmniVoice-সমর্থিত WAV ফরম্যাটে রূপান্তর করা হচ্ছে…");
       const normalizedSample = await convertToMonoWav(audioFile);
       setMessage("ব্যক্তিগত WAV voice sample আপলোড হচ্ছে…");
       const objectPath = user.id + "/" + crypto.randomUUID() + ".wav";
@@ -614,11 +551,28 @@ export default function Home() {
       }
 
       try {
-        setMessage("নমুনা সংরক্ষিত। এখন Voice Profile তৈরি হচ্ছে…");
-        const preview = await runMayaClone("আমার কণ্ঠে বাংলা অডিও পরীক্ষা করা হচ্ছে।", normalizedSample, transcript, "bn");
-        await updateVoiceProfileStatus(profile.data.id, "ready");
+        setMessage("নমুনা ও সম্মতি সংরক্ষিত। এখন OmniVoice দিয়ে Voice Profile তৈরি হচ্ছে…");
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        const sessionToken = sessionData.session?.access_token;
+        if (sessionError || !sessionToken) throw new Error("Creovanta session শেষ হয়েছে। আবার sign in করো।");
+        const response = await fetch("https://creovanta-api.onrender.com/api/v1/speech/voices/clone", {
+          method: "POST",
+          headers: {
+            "Authorization": "Bearer " + sessionToken,
+            "X-HF-Token": hfAccessToken,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ voice_profile_id: profile.data.id }),
+        });
+        if (!response.ok) {
+          let detail = "Voice cloning failed (HTTP " + response.status + ").";
+          try { const body = await response.json(); detail = body.detail || detail; } catch {}
+          throw new Error(detail);
+        }
+        const previewBlob = await response.blob();
+        if (!previewBlob.size) throw new Error("OmniVoice কোনো অডিও ফেরত দেয়নি।");
         if (clonePreviewUrl) URL.revokeObjectURL(clonePreviewUrl);
-        setClonePreviewUrl(URL.createObjectURL(preview.blob));
+        setClonePreviewUrl(URL.createObjectURL(previewBlob));
       } catch (error) {
         await updateVoiceProfileStatus(profile.data.id, "failed").catch(() => undefined);
         await loadProfiles(profile.data.id);
@@ -694,7 +648,7 @@ export default function Home() {
           <div className="status">Your account is connected. Add a voice sample below. Uploads are private and restricted to your account.</div>
           <div className="feature" style={{padding:16,marginBottom:18}}>
             <b>Creovanta Speech Studio</b>
-            <p className="small" style={{margin:"8px 0 12px"}}>{hfAccessToken ? "Connected as " + hfUsername + ". The token stays only in this open page and is cleared on refresh; Creovanta does not store it." : "Maya ZeroGPU-তে নিজের Free daily quota ব্যবহার করতে Hugging Face-এর Read token একবার সংযুক্ত করুন। কোনো payment card বা paid plan লাগবে না।"}</p>
+            <p className="small" style={{margin:"8px 0 12px"}}>{hfAccessToken ? "Connected as " + hfUsername + ". The token stays only in this open page and is cleared on refresh; Creovanta does not store it." : "OmniVoice ZeroGPU-তে নিজের Free daily quota ব্যবহার করতে Hugging Face-এর Read token একবার সংযুক্ত করুন। কোনো payment card বা paid plan লাগবে না।"}</p>
             {hfAccessToken ? <button className="btn secondary" onClick={disconnectGenerationAccount}>Disconnect generation account</button> : <>
               <label htmlFor="hf-read-token">Hugging Face Read token</label>
               <input id="hf-read-token" className="field" type="password" autoComplete="off" spellCheck={false} value={hfTokenInput} onChange={e=>setHfTokenInput(e.target.value)} placeholder="hf_..." />
@@ -709,16 +663,16 @@ export default function Home() {
           <label>Voice Description (required)</label><textarea className="field" rows={2} required value={voiceDescription} onChange={e=>setVoiceDescription(e.target.value)} placeholder="Describe the natural voice style" style={{resize:"vertical",lineHeight:1.6}}/>
           <label htmlFor="voice-audio">Audio sample (WAV, MP3, FLAC, OGG · max 50 MB)</label>
           <input id="voice-audio" className="field" type="file" accept=".wav,.mp3,.flac,.ogg,.oga,audio/wav,audio/mpeg,audio/flac,audio/ogg" onChange={e=>setAudioFile(e.target.files?.[0] ?? null)}/>
-          <p className="small" style={{marginTop:8,marginBottom:12}}>Maya-এর reference voice নিয়ম অনুযায়ী ৩–১০ সেকেন্ডের পরিষ্কার বাংলা অডিও দিন। ১০ সেকেন্ডের বেশি হলে ছোট করে কাটুন এবং Transcript-এ শুধু ওই অংশের কথাগুলো লিখুন।</p>
+          <p className="small" style={{marginTop:8,marginBottom:12}}>OmniVoice-এর জন্য ৩–১০ সেকেন্ডের পরিষ্কার বাংলা অডিও দিন। ১০ সেকেন্ডের বেশি হলে ছোট করে কাটুন এবং Transcript-এ শুধু ওই অংশের কথাগুলো লিখুন।</p>
           <label>Reference Transcript (required)</label>
           <textarea className="field" rows={3} required value={referenceTranscript} onChange={e=>setReferenceTranscript(e.target.value)} placeholder="অডিওতে যা বলা হয়েছে ঠিক সেটাই এখানে লিখুন…" style={{resize:"vertical",lineHeight:1.7}}/>
           <p className="small" style={{marginTop:6,marginBottom:12}}>অডিওতে বলা কথাগুলো হুবহু লিখুন। ভুল বা অসম্পূর্ণ Transcript হলে কণ্ঠের মিল কমতে পারে।</p>
-          <p className="small" style={{margin:"12px 0 8px"}}>গুরুত্বপূর্ণ: voice cloning-এর জন্য নমুনা অডিও ও আপনার দেওয়া Transcript Hugging Face-এর Maya speech processing service-এ পাঠানো হবে। বাইরের service-এর retention Creovanta সরাসরি নিয়ন্ত্রণ করে না.</p>
+          <p className="small" style={{margin:"12px 0 8px"}}>গুরুত্বপূর্ণ: voice cloning-এর জন্য নমুনা অডিও ও আপনার দেওয়া Transcript Hugging Face-এর OmniVoice speech processing service-এ পাঠানো হবে। বাইরের service-এর retention Creovanta সরাসরি নিয়ন্ত্রণ করে না.</p>
           <label style={{display:"flex",alignItems:"flex-start",gap:10,margin:"10px 0 18px",lineHeight:1.5}}>
             <input type="checkbox" checked={consentAccepted} onChange={e=>setConsentAccepted(e.target.checked)} style={{marginTop:3}}/>
             আমি নিশ্চিত করছি এটি আমার নিজের কণ্ঠ অথবা কণ্ঠের মালিকের স্পষ্ট অনুমতি আছে। আমি নমুনা অডিও ও আমার দেওয়া Transcript voice cloning-এর জন্য পাঠাতে সম্মত.
           </label>
-          <button className="btn" style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9}} onClick={uploadVoice} disabled={busy}><UploadCloud size={17}/>{busy ? "Maya-তে Voice Clone চলছে…" : "Voice Clone"}</button>
+          <button className="btn" style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:9}} onClick={uploadVoice} disabled={busy}><UploadCloud size={17}/>{busy ? "OmniVoice-এ Voice Clone চলছে…" : "Voice Clone"}</button>
           {message && <div className="status" role="status" aria-live="polite" style={{marginTop:12,whiteSpace:"pre-wrap"}}>{message}</div>}
           <div style={{marginTop:28,borderTop:"1px solid #293044",paddingTop:22}}>
             <h3 style={{fontSize:20,letterSpacing:"-.5px"}}>Creovanta বাংলা Text-to-Speech</h3>
