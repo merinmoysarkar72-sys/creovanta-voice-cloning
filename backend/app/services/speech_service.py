@@ -221,6 +221,22 @@ def _call_speech_clone(
         raise RuntimeError(f"OmniVoice did not return audio: {status}")
 
     audio = result[0]
+    # Gradio may serialize an Audio output as a downloaded local filepath
+    # instead of the (sample_rate, numpy_array) tuple. Accept both contracts.
+    if isinstance(audio, (str, os.PathLike)):
+        audio_file = Path(audio)
+        if not audio_file.is_file():
+            raise RuntimeError("OmniVoice returned an audio filepath that does not exist")
+        audio_bytes = audio_file.read_bytes()
+        if not audio_bytes:
+            raise RuntimeError("OmniVoice returned an empty audio file")
+        try:
+            with wave.open(io.BytesIO(audio_bytes), "rb") as wav_file:
+                duration = float(wav_file.getnframes() / wav_file.getframerate())
+        except (wave.Error, ZeroDivisionError) as exc:
+            raise RuntimeError("OmniVoice returned an invalid WAV audio file") from exc
+        return audio_bytes, duration
+
     if not isinstance(audio, (tuple, list)) or len(audio) != 2:
         raise RuntimeError(f"OmniVoice returned an unexpected audio payload: {type(audio).__name__}")
 
