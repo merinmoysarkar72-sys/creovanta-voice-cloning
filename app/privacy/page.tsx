@@ -31,7 +31,7 @@ export default function PrivacyPolicy() {
         <li><b>Supabase</b> provides account authentication, database services, and private voice-sample storage.</li>
         <li><b>Vercel</b> hosts the Creovanta web application.</li>
         <li><b>Render</b> hosts the Creovanta API backend.</li>
-        <li><b>External speech processing:</b> when you create a voice profile, your reference recording and the transcript you enter are sent to the Hugging Face-hosted Maya speech service for voice cloning and speech generation. Hugging Face and the respective service operators control their own infrastructure and retention practices.</li>
+        <li><b>External speech processing:</b> when you create a voice profile, your reference recording and the transcript you enter are sent to the Hugging Face-hosted OmniVoice ZeroGPU speech service for voice cloning and speech generation. Hugging Face and the respective service operators control their own infrastructure and retention practices.</li>
       </ul>
       <p>We do not sell personal information. External providers process data under their own terms and privacy policies. Do not upload another person's voice unless you have explicit permission.</p>
 
