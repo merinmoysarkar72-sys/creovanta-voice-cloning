@@ -437,6 +437,7 @@ export default function Home() {
 
   async function retryVoiceClone(profileId: string) {
     if (!supabase) return;
+    if (!hfAccessToken) { setMessage("আগে Hugging Face Read token connect করো। আগের Voice Profile আবার তৈরি করতে নতুন নমুনা লাগবে না।"); return; }
     const profile = profiles.find(item => item.id === profileId);
     if (!profile?.source_audio_path) {
       setMessage("এই Profile-এর private sample পাওয়া যাচ্ছে না। নতুন অডিও upload করো।");
