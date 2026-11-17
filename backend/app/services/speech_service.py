@@ -7,12 +7,13 @@ ZeroGPU usage is charged to that caller, never to a shared service token.
 from __future__ import annotations
 
 import asyncio
-import mimetypes
+import io
 import os
 import tempfile
+import wave
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import quote, urljoin, urlparse
+from urllib.parse import quote
 from uuid import UUID
 
 import httpx
@@ -23,8 +24,8 @@ from pydantic import BaseModel, Field
 router = APIRouter(prefix="/api/v1/speech", tags=["creovanta-speech"])
 
 HF_WHOAMI_URL = "https://huggingface.co/api/whoami-v2"
-HF_SPACE_ID = "maya-research/maya2-native-studio"
-HF_SPACE_URL = "https://maya-research-maya2-native-studio.hf.space"
+HF_SPACE_ID = "k2-fsa/OmniVoice"
+HF_SPACE_URL = "https://k2-fsa-omnivoice.hf.space"
 VOICE_BUCKET = "voice-samples"
 MAX_REFERENCE_BYTES = 50 * 1024 * 1024
 MAX_TEXT_CHARS = 1200
@@ -177,45 +178,73 @@ def _call_speech_clone(
     text: str,
     reference_text: str,
     reference_language: str,
-) -> dict[str, Any]:
-    """Blocking Gradio client call; run in a worker thread from async routes."""
+) -> tuple[bytes, float]:
+    """Call the public OmniVoice ZeroGPU Space and encode its WAV result."""
     from gradio_client import Client
+    import numpy as np
 
-    # Maya's API declares ref_audio as a plain server path (str), not FileData.
-    # Upload explicitly first, then pass the returned path to /clone_speak.
-    with open(audio_path, "rb") as audio_file:
-        upload = httpx.post(
-            f"{HF_SPACE_URL}/gradio_api/upload",
-            headers={"Authorization": f"Bearer {hf_token}"},
-            files={"files": (Path(audio_path).name, audio_file, mimetypes.guess_type(audio_path)[0] or "application/octet-stream")},
-            timeout=60.0,
-        )
-    upload.raise_for_status()
-    uploaded = upload.json()
-    if not isinstance(uploaded, list) or not uploaded or not isinstance(uploaded[0], str):
-        raise RuntimeError("Maya upload did not return a server file path")
-
-    client = Client(HF_SPACE_ID, token=hf_token, verbose=False, analytics_enabled=False, httpx_kwargs={"timeout": 240})
+    language = "Bengali" if reference_language.lower() in {"bn", "bn-bd", "bengali"} else reference_language
+    client = Client(
+        HF_SPACE_ID,
+        token=hf_token,
+        verbose=False,
+        analytics_enabled=False,
+        httpx_kwargs={"timeout": 240},
+    )
     try:
+        # The official Space's first Gradio event is Voice Clone. Its inputs
+        # follow the Voice Clone tab: text, language, ref audio, transcript,
+        # instruction, steps, guidance, denoise, speed, duration, preprocess,
+        # postprocess. The Gradio client uploads the local reference file.
         result = client.predict(
             text,
-            uploaded[0],
-            reference_text,
-            reference_language,
-            "bn",
+            language,
+            audio_path,
+            reference_text or "",
+            "",
+            32,
+            2.0,
             True,
-            0,
+            1.0,
+            None,
             True,
-            api_name="/clone_speak",
+            True,
+            fn_index=0,
         )
     finally:
         close = getattr(client, "close", None)
         if callable(close):
             close()
 
-    if not isinstance(result, dict) or not result.get("audio_url"):
-        raise RuntimeError("Creovanta speech service returned an unexpected audio result")
-    return result
+    if not isinstance(result, (tuple, list)) or len(result) < 1 or result[0] is None:
+        status = str(result[1]) if isinstance(result, (tuple, list)) and len(result) > 1 else "No audio returned"
+        raise RuntimeError(f"OmniVoice did not return audio: {status}")
+
+    audio = result[0]
+    if not isinstance(audio, (tuple, list)) or len(audio) != 2:
+        raise RuntimeError(f"OmniVoice returned an unexpected audio payload: {type(audio).__name__}")
+
+    sample_rate = int(audio[0])
+    samples = np.asarray(audio[1])
+    if sample_rate <= 0 or samples.size == 0:
+        raise RuntimeError("OmniVoice returned an empty audio waveform")
+
+    if samples.ndim > 1:
+        if samples.shape[-1] <= 2:
+            samples = samples.mean(axis=-1)
+        else:
+            samples = samples.reshape(-1)
+    samples = np.nan_to_num(samples.astype(np.float32), copy=False)
+    pcm = (np.clip(samples, -1.0, 1.0) * 32767.0).astype("<i2")
+
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(pcm.tobytes())
+
+    return output.getvalue(), float(samples.shape[0] / sample_rate)
 
 
 async def _generate_speech_audio(
@@ -231,7 +260,7 @@ async def _generate_speech_audio(
         audio_path = str(Path(folder) / f"reference{suffix}")
         Path(audio_path).write_bytes(sample)
         try:
-            result = await asyncio.to_thread(
+            return await asyncio.to_thread(
                 _call_speech_clone,
                 hf_token,
                 audio_path,
@@ -241,30 +270,17 @@ async def _generate_speech_audio(
             )
         except Exception as exc:
             diagnostic = str(exc).replace(hf_token, "[redacted]")[:800]
-            print(f"[creovanta-speech] generation failed: {type(exc).__name__}: {diagnostic}", flush=True)
+            print(f"[creovanta-speech] OmniVoice generation failed: {type(exc).__name__}: {diagnostic}", flush=True)
             message = str(exc).lower()
-            if "quota" in message or "exceeded" in message:
+            if "quota" in message or "exceeded" in message or "gpu minutes" in message:
                 raise HTTPException(
                     status_code=429,
-                    detail="Your daily generation allowance may be exhausted. Try again after it resets.",
+                    detail="Your Hugging Face ZeroGPU allowance may be exhausted. Try again after it resets.",
                 ) from exc
             raise HTTPException(
                 status_code=502,
-                detail="Creovanta could not generate audio. Check the reference clip and transcript, then retry.",
+                detail="Creovanta could not generate audio with OmniVoice. Please retry later.",
             ) from exc
-
-    audio_url = str(result["audio_url"])
-    resolved_url = urljoin(HF_SPACE_URL + "/", audio_url)
-    parsed = urlparse(resolved_url)
-    if parsed.scheme != "https" or parsed.hostname != urlparse(HF_SPACE_URL).hostname:
-        raise HTTPException(status_code=502, detail="Creovanta returned an invalid audio location")
-
-    audio_response = await client.get(
-        resolved_url, headers={"Authorization": f"Bearer {hf_token}"}
-    )
-    if not audio_response.is_success or not audio_response.content:
-        raise HTTPException(status_code=502, detail="Creovanta generated audio but it could not be retrieved")
-    return audio_response.content, float(result.get("duration") or 0)
 
 
 async def _set_profile_status(
