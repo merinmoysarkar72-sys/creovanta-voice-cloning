@@ -234,8 +234,13 @@ def _call_speech_clone(
             samples = samples.mean(axis=-1)
         else:
             samples = samples.reshape(-1)
-    samples = np.nan_to_num(samples.astype(np.float32), copy=False)
-    pcm = (np.clip(samples, -1.0, 1.0) * 32767.0).astype("<i2")
+    duration = float(samples.shape[0] / sample_rate)
+    if np.issubdtype(samples.dtype, np.integer):
+        # The official Space already returns int16 PCM; do not normalize it twice.
+        pcm = samples.astype("<i2", copy=False)
+    else:
+        samples = np.nan_to_num(samples.astype(np.float32), copy=False)
+        pcm = (np.clip(samples, -1.0, 1.0) * 32767.0).astype("<i2")
 
     output = io.BytesIO()
     with wave.open(output, "wb") as wav_file:
@@ -244,7 +249,7 @@ def _call_speech_clone(
         wav_file.setframerate(sample_rate)
         wav_file.writeframes(pcm.tobytes())
 
-    return output.getvalue(), float(samples.shape[0] / sample_rate)
+    return output.getvalue(), duration
 
 
 async def _generate_speech_audio(
