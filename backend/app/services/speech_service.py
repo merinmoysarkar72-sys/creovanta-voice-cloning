@@ -180,7 +180,7 @@ def _call_speech_clone(
     reference_language: str,
 ) -> tuple[bytes, float]:
     """Call the public OmniVoice ZeroGPU Space and encode its WAV result."""
-    from gradio_client import Client
+    from gradio_client import Client, handle_file
     import numpy as np
 
     language = "Bengali" if reference_language.lower() in {"bn", "bn-bd", "bengali"} else reference_language
@@ -199,7 +199,7 @@ def _call_speech_clone(
         result = client.predict(
             text,
             language,
-            audio_path,
+            handle_file(audio_path),
             reference_text or "",
             "",
             32,
