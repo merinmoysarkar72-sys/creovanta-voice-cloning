@@ -209,7 +209,7 @@ def _call_speech_clone(
             None,
             True,
             True,
-            fn_index=0,
+            api_name="/_clone_fn",
         )
     finally:
         close = getattr(client, "close", None)
