@@ -1,7 +1,7 @@
-"""Per-user Maya 2 Native integration through Hugging Face ZeroGPU.
+"""Per-user OmniVoice integration through Hugging Face ZeroGPU.
 
 The caller supplies their own Hugging Face Personal Access Token (PAT).
-It is verified for each request and passed only to the public Maya Space so
+It is verified for each request and passed only to the public OmniVoice Space so
 ZeroGPU usage is charged to that caller, never to a shared service token.
 """
 from __future__ import annotations
